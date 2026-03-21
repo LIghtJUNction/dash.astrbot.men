@@ -33,23 +33,8 @@ jobs:
           # 排除 .git 和 .github 目录
           rsync -av --exclude='.git' --exclude='.github' /tmp/astrbot/dashboard/ ./
 
-          # 检查是否有变化（排除 .github 目录）
-          if git diff --quiet HEAD -- . ':!.github'; then
-            # 首次同步时，HEAD 不存在任何文件，应该直接同步
-            if [ "$(git rev-parse HEAD)" != "" ] && [ "$(git ls-tree --name-only HEAD)" != "" ]; then
-              echo "has_changes=false" >> $GITHUB_OUTPUT
-              echo "没有检测到文件变化"
-            else
-              echo "has_changes=true" >> $GITHUB_OUTPUT
-              echo "首次同步，直接添加所有文件"
-            fi
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-            echo "检测到文件变化"
-          fi
 
       - name: Commit and push changes
-        if: steps.sync.outputs.has_changes == 'true'
         run: |
           git add -A
           git commit -m "chore: sync dashboard from AstrBot@dev ($(date +'%Y-%m-%d %H:%M:%S'))"
