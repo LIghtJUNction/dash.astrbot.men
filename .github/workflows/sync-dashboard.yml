@@ -1,0 +1,64 @@
+name: Sync AstrBot Dashboard
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # 每天 UTC 0:00 执行
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  sync-dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Git
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Clone AstrBot repository
+        run: |
+          git clone --depth 1 --branch dev https://github.com/AstrBotDevs/AstrBot.git /tmp/astrbot
+
+      - name: Sync dashboard to root directory
+        id: sync
+        run: |
+          # 使用 rsync 同步 dashboard 内容到仓库根目录
+          # 排除 .git 和 .github 目录
+          rsync -av --exclude='.git' --exclude='.github' /tmp/astrbot/dashboard/ ./
+
+          # 检查是否有变化（排除 .github 目录）
+          if git diff --quiet HEAD -- . ':!.github'; then
+            # 首次同步时，HEAD 不存在任何文件，应该直接同步
+            if [ "$(git rev-parse HEAD)" != "" ] && [ "$(git ls-tree --name-only HEAD)" != "" ]; then
+              echo "has_changes=false" >> $GITHUB_OUTPUT
+              echo "没有检测到文件变化"
+            else
+              echo "has_changes=true" >> $GITHUB_OUTPUT
+              echo "首次同步，直接添加所有文件"
+            fi
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "检测到文件变化"
+          fi
+
+      - name: Commit and push changes
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          git add -A
+          git commit -m "chore: sync dashboard from AstrBot@dev ($(date +'%Y-%m-%d %H:%M:%S'))"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Show sync result
+        run: |
+          echo "=== Sync Complete ==="
+          echo "Has changes: ${{ steps.sync.outputs.has_changes }}"
+          echo "Dashboard source commit: $(cd /tmp/astrbot && git log -1 --format='%H %s')"
