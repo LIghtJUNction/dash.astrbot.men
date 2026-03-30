@@ -1,128 +1,182 @@
 <template>
-  <div
-    style="
-      background-color: var(--v-theme-surface, #fff);
-      padding: 8px;
-      padding-left: 16px;
-      border-radius: 8px;
-      margin-bottom: 24px;
-    "
-  >
-    <v-list lines="two">
-      <v-list-subheader>{{ tm("network.title") }}</v-list-subheader>
-
-      <v-list-item>
+  <div class="settings-page">
+    <!-- Network Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-earth</v-icon>
+        {{ tm("network.title") }}
+      </v-card-title>
+      <v-card-text>
         <ProxySelector />
-      </v-list-item>
+      </v-card-text>
+    </v-card>
 
-      <v-list-subheader>{{ tm("sidebar.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('sidebar.customize.subtitle')"
-        :title="tm('sidebar.customize.title')"
-      >
+    <!-- Sidebar Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-menu</v-icon>
+        {{ tm("sidebar.title") }}
+      </v-card-title>
+      <v-card-subtitle>{{ tm("sidebar.customize.subtitle") }}</v-card-subtitle>
+      <v-card-text>
         <SidebarCustomizer />
-      </v-list-item>
+      </v-card-text>
+    </v-card>
 
-      <v-list-subheader>{{ tm("theme.title") }}</v-list-subheader>
+    <!-- Theme Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-palette</v-icon>
+        {{ tm("theme.customize.title") }}
+      </v-card-title>
+      <v-card-subtitle>{{ tm("theme.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <!-- Row 1: Preset selector + theme mode -->
+        <div class="d-flex flex-wrap align-center ga-4 mb-4">
+          <v-select
+            v-model="selectedThemePreset"
+            :items="presetOptions"
+            :label="tm('theme.customize.preset')"
+            hide-details
+            variant="outlined"
+            density="compact"
+            style="min-width: 200px; max-width: 280px"
+            @update:model-value="applyThemePreset"
+          />
+          <v-btn-toggle
+            v-model="isDarkMode"
+            mandatory
+            density="compact"
+            color="primary"
+            @update:model-value="toggleThemeMode"
+          >
+            <v-btn value="light" size="small">
+              <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
+              亮色
+            </v-btn>
+            <v-btn value="dark" size="small">
+              <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
+              暗色
+            </v-btn>
+          </v-btn-toggle>
+        </div>
 
-      <v-list-item
-        :subtitle="tm('theme.subtitle')"
-        :title="tm('theme.customize.title')"
-      >
-        <v-row class="mt-2" density="compact">
-          <v-col cols="4" sm="2">
-            <v-text-field
-              v-model="primaryColor"
-              type="color"
-              :label="tm('theme.customize.primary')"
-              hide-details
-              variant="outlined"
-              density="compact"
-              style="max-width: 220px"
-            />
-          </v-col>
-          <v-col cols="4" sm="2   ">
-            <v-text-field
-              v-model="secondaryColor"
-              type="color"
-              :label="tm('theme.customize.secondary')"
-              hide-details
-              variant="outlined"
-              density="compact"
-              style="max-width: 220px"
-            />
-          </v-col>
-          <v-col cols="12">
+        <!-- Row 2: Color pickers + reset -->
+        <v-card variant="outlined" class="pa-4">
+          <div class="text-body-2 text-medium-emphasis mb-3">
+            {{ tm("theme.customize.colors") }}
+          </div>
+          <div class="d-flex flex-wrap align-center ga-4">
+            <div class="d-flex align-center ga-3">
+              <v-text-field
+                v-model="primaryColor"
+                type="color"
+                :label="tm('theme.customize.primary')"
+                hide-details
+                variant="outlined"
+                density="compact"
+                style="width: 140px"
+              />
+              <div
+                class="color-preview"
+                :style="{ backgroundColor: primaryColor }"
+              />
+            </div>
+            <div class="d-flex align-center ga-3">
+              <v-text-field
+                v-model="secondaryColor"
+                type="color"
+                :label="tm('theme.customize.secondary')"
+                hide-details
+                variant="outlined"
+                density="compact"
+                style="width: 140px"
+              />
+              <div
+                class="color-preview"
+                :style="{ backgroundColor: secondaryColor }"
+              />
+            </div>
             <v-btn
               size="small"
               variant="tonal"
               color="primary"
               @click="resetThemeColors"
             >
-              <v-icon class="mr-2"> mdi-restore </v-icon>
+              <v-icon class="mr-1" size="16">mdi-restore</v-icon>
               {{ tm("theme.customize.reset") }}
             </v-btn>
-          </v-col>
-        </v-row>
-      </v-list-item>
-
-      <v-list-subheader>{{ tm("system.title") }}</v-list-subheader>
-
-      <v-list-item
-        :subtitle="tm('system.backup.subtitle')"
-        :title="tm('system.backup.title')"
-      >
-        <v-btn
-          style="margin-top: 16px"
-          color="primary"
-          @click="openBackupDialog"
-        >
-          <v-icon class="mr-2"> mdi-backup-restore </v-icon>
-          {{ tm("system.backup.button") }}
-        </v-btn>
-      </v-list-item>
-
-      <v-list-item
-        :subtitle="tm('system.restart.subtitle')"
-        :title="tm('system.restart.title')"
-      >
-        <v-btn style="margin-top: 16px" color="error" @click="restartAstrBot">
-          {{ tm("system.restart.button") }}
-        </v-btn>
-      </v-list-item>
-
-      <v-list-item class="py-2">
-        <StorageCleanupPanel />
-      </v-list-item>
-
-      <v-list-subheader>{{ tm("apiKey.title") }}</v-list-subheader>
-
-      <v-list-item :subtitle="tm('apiKey.subtitle')">
-        <template #title>
-          <div class="d-flex align-center">
-            <span>{{ tm("apiKey.manageTitle") }}</span>
-            <v-tooltip location="top">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon
-                  size="x-small"
-                  variant="text"
-                  class="ml-2"
-                  :aria-label="tm('apiKey.docsLink')"
-                  href="https://docs.astrbot.app/dev/openapi.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <v-icon size="18"> mdi-help-circle-outline </v-icon>
-                </v-btn>
-              </template>
-              <span>{{ tm("apiKey.docsLink") }}</span>
-            </v-tooltip>
           </div>
-        </template>
-        <v-row class="mt-2" density="compact">
+        </v-card>
+      </v-card-text>
+    </v-card>
+
+    <!-- System Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-cog</v-icon>
+        {{ tm("system.title") }}
+      </v-card-title>
+      <v-card-text>
+        <div class="d-flex flex-wrap ga-3 mb-4">
+          <div>
+            <div class="text-body-2 mb-1">{{ tm("system.backup.title") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.backup.subtitle") }}</div>
+            <v-btn color="primary" size="small" @click="openBackupDialog">
+              <v-icon class="mr-1" size="16">mdi-backup-restore</v-icon>
+              {{ tm("system.backup.button") }}
+            </v-btn>
+          </div>
+          <v-divider vertical class="mx-2 mx-md-4" />
+          <div>
+            <div class="text-body-2 mb-1">{{ tm("system.restart.title") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.restart.subtitle") }}</div>
+            <v-btn color="error" size="small" @click="restartAstrBot">
+              <v-icon class="mr-1" size="16">mdi-restart</v-icon>
+              {{ tm("system.restart.button") }}
+            </v-btn>
+          </div>
+          <v-divider vertical class="mx-2 mx-md-4" />
+          <div>
+            <div class="text-body-2 mb-1">{{ tm("system.migration.title") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.migration.subtitle") }}</div>
+            <v-btn color="primary" size="small" variant="outlined" @click="startMigration">
+              <v-icon class="mr-1" size="16">mdi-database-import</v-icon>
+              {{ tm("system.migration.button") }}
+            </v-btn>
+          </div>
+        </div>
+        <StorageCleanupPanel />
+      </v-card-text>
+    </v-card>
+
+    <!-- API Key Card -->
+    <v-card class="mb-4" variant="flat">
+      <v-card-title class="d-flex align-center">
+        <v-icon class="mr-2" size="20">mdi-key</v-icon>
+        {{ tm("apiKey.manageTitle") }}
+        <v-tooltip location="top">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon
+              size="x-small"
+              variant="text"
+              class="ml-2"
+              :aria-label="tm('apiKey.docsLink')"
+              href="https://docs.astrbot.app/dev/openapi.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <v-icon size="18">mdi-help-circle-outline</v-icon>
+            </v-btn>
+          </template>
+          <span>{{ tm("apiKey.docsLink") }}</span>
+        </v-tooltip>
+      </v-card-title>
+      <v-card-subtitle>{{ tm("apiKey.subtitle") }}</v-card-subtitle>
+      <v-card-text>
+        <v-row density="compact">
           <v-col cols="12" md="4">
             <v-text-field
               v-model="newApiKeyName"
@@ -142,24 +196,23 @@
               hide-details
             />
           </v-col>
-          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
-            <v-alert type="warning" variant="tonal" density="comfortable">
-              {{ tm("apiKey.permanentWarning") }}
-            </v-alert>
-          </v-col>
           <v-col cols="12" md="5" class="d-flex align-center">
             <v-btn
               color="primary"
               :loading="apiKeyCreating"
               @click="createApiKey"
             >
-              <v-icon class="mr-2"> mdi-key-plus </v-icon>
+              <v-icon class="mr-2">mdi-key-plus</v-icon>
               {{ tm("apiKey.create") }}
             </v-btn>
           </v-col>
-
+          <v-col v-if="newApiKeyExpiresInDays === 'permanent'" cols="12">
+            <v-alert type="warning" variant="tonal" density="comfortable">
+              {{ tm("apiKey.permanentWarning") }}
+            </v-alert>
+          </v-col>
           <v-col cols="12">
-            <div class="text-caption text-medium-emphasis mb-1">
+            <div class="text-caption text-medium-emphasis mb-2">
               {{ tm("apiKey.scopes") }}
             </div>
             <v-chip-group v-model="newApiKeyScopes" multiple>
@@ -178,7 +231,6 @@
               </v-chip>
             </v-chip-group>
           </v-col>
-
           <v-col v-if="createdApiKeyPlaintext" cols="12">
             <v-alert type="warning" variant="tonal">
               <div class="d-flex align-center justify-space-between flex-wrap">
@@ -189,8 +241,8 @@
                   color="primary"
                   @click="copyCreatedApiKey"
                 >
-                  <v-icon class="mr-1"> mdi-content-copy </v-icon
-                  >{{ tm("apiKey.copy") }}
+                  <v-icon class="mr-1">mdi-content-copy</v-icon>
+                  {{ tm("apiKey.copy") }}
                 </v-btn>
               </div>
               <code style="word-break: break-all">{{
@@ -198,7 +250,6 @@
               }}</code>
             </v-alert>
           </v-col>
-
           <v-col cols="12">
             <v-table density="compact">
               <thead>
@@ -215,16 +266,12 @@
               <tbody>
                 <tr v-for="item in apiKeys" :key="item.key_id">
                   <td>{{ item.name }}</td>
-                  <td>
-                    <code>{{ item.key_prefix }}</code>
-                  </td>
+                  <td><code>{{ item.key_prefix }}</code></td>
                   <td>{{ (item.scopes || []).join(", ") }}</td>
                   <td>
                     <v-chip
                       size="small"
-                      :color="
-                        item.is_revoked || item.is_expired ? 'error' : 'success'
-                      "
+                      :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
                       variant="tonal"
                     >
                       {{
@@ -266,17 +313,8 @@
             </v-table>
           </v-col>
         </v-row>
-      </v-list-item>
-    </v-list>
-
-    <v-list-item
-      :subtitle="tm('system.migration.subtitle')"
-      :title="tm('system.migration.title')"
-    >
-      <v-btn style="margin-top: 16px" color="primary" @click="startMigration">
-        {{ tm("system.migration.button") }}
-      </v-btn>
-    </v-list-item>
+      </v-card-text>
+    </v-card>
   </div>
 
   <WaitingForRestart ref="wfr" />
@@ -286,7 +324,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import axios from "axios";
+import axios from "@/utils/request";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
@@ -296,12 +334,24 @@ import StorageCleanupPanel from "@/components/shared/StorageCleanupPanel.vue";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import { useModuleI18n } from "@/i18n/composables";
 import { useTheme } from "vuetify";
-import { PurpleTheme } from "@/theme/LightTheme";
+import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
+import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
 import { useToastStore } from "@/stores/toast";
+import { useCustomizerStore } from "@/stores/customizer";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const theme = useTheme();
+const customizer = useCustomizerStore();
+
+// Theme mode toggle (light/dark)
+const isDarkMode = ref(customizer.isDarkTheme ? "dark" : "light");
+
+const toggleThemeMode = (mode: string) => {
+  const newTheme = mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME;
+  customizer.SET_UI_THEME(newTheme);
+  vuetify.theme.change(newTheme);
+};
 
 const getStoredColor = (key, fallback) => {
   const stored =
@@ -310,11 +360,91 @@ const getStoredColor = (key, fallback) => {
 };
 
 const primaryColor = ref(
-  getStoredColor("themePrimary", PurpleTheme.colors.primary),
+  getStoredColor("themePrimary", BlueBusinessLightTheme.colors.primary),
 );
 const secondaryColor = ref(
-  getStoredColor("themeSecondary", PurpleTheme.colors.secondary),
+  getStoredColor("themeSecondary", BlueBusinessLightTheme.colors.secondary),
 );
+
+// Theme presets based on MD3 color system
+const themePresets = [
+  {
+    id: "blue-business",
+    name: "活力商务蓝",
+    nameEn: "Business Blue",
+    primary: "#005FB0",
+    secondary: "#565E71",
+    tertiary: "#006B5B",
+  },
+  {
+    id: "purple-default",
+    name: "优雅紫",
+    nameEn: "Elegant Purple",
+    primary: "#6750A4",
+    secondary: "#625B71",
+    tertiary: "#7D5260",
+  },
+  {
+    id: "teal-fresh",
+    name: "自然清新绿",
+    nameEn: "Nature Green",
+    primary: "#386A20",
+    secondary: "#55624C",
+    tertiary: "#19686A",
+  },
+  {
+    id: "orange-warm",
+    name: "温暖橙棕",
+    nameEn: "Warm Orange",
+    primary: "#9C4323",
+    secondary: "#77574E",
+    tertiary: "#6C5D2F",
+  },
+  {
+    id: "ocean-breeze",
+    name: "海洋清风",
+    nameEn: "Ocean Breeze",
+    primary: "#0077B6",
+    secondary: "#4A5568",
+    tertiary: "#00B4D8",
+  },
+  {
+    id: "rose-romantic",
+    name: "浪漫玫瑰",
+    nameEn: "Romantic Rose",
+    primary: "#BE185D",
+    secondary: "#9F1239",
+    tertiary: "#DB2777",
+  },
+];
+
+// Get stored preset or default to blue-business name
+const selectedThemePreset = ref(
+  localStorage.getItem("themePreset") || themePresets[0].name,
+);
+
+// Simple array for dropdown display
+const presetOptions = themePresets.map((p) => p.name);
+
+const applyThemePreset = (presetName: string) => {
+  const preset = themePresets.find((p) => p.name === presetName);
+  if (!preset) return;
+
+  // Store the preset selection (store by name for display consistency)
+  localStorage.setItem("themePreset", presetName);
+  selectedThemePreset.value = presetName;
+
+  // Update primary and secondary colors
+  primaryColor.value = preset.primary;
+  secondaryColor.value = preset.secondary;
+  localStorage.setItem("themePrimary", preset.primary);
+  localStorage.setItem("themeSecondary", preset.secondary);
+
+  // Apply to themes
+  applyThemeColors(preset.primary, preset.secondary);
+
+  toastStore.add({ message: tm("theme.customize.presetApplied") || "主题已应用", color: "success" });
+};
 
 const resolveThemes = () => {
   if (theme?.themes?.value) return theme.themes.value;
@@ -325,7 +455,7 @@ const resolveThemes = () => {
 const applyThemeColors = (primary, secondary) => {
   const themes = resolveThemes();
   if (!themes) return;
-  ["PurpleTheme", "PurpleThemeDark"].forEach((name) => {
+  [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
     const themeDef = themes[name];
     if (!themeDef?.colors) return;
     if (primary) themeDef.colors.primary = primary;
@@ -567,8 +697,8 @@ const openBackupDialog = () => {
 };
 
 const resetThemeColors = () => {
-  primaryColor.value = PurpleTheme.colors.primary;
-  secondaryColor.value = PurpleTheme.colors.secondary;
+  primaryColor.value = BlueBusinessLightTheme.colors.primary;
+  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
   localStorage.removeItem("themePrimary");
   localStorage.removeItem("themeSecondary");
   applyThemeColors(primaryColor.value, secondaryColor.value);
