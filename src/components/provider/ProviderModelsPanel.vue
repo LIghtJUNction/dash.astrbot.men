@@ -1,12 +1,12 @@
 <template>
-  <div class="mt-4">
-    <div class="d-flex align-center ga-2 mb-2">
-      <h3 class="text-h5 font-weight-bold mb-0">
-        {{ tm("models.configured") }}
-      </h3>
-      <small v-if="availableCount" style="color: grey"
-        >{{ tm("models.available") }} {{ availableCount }}</small
-      >
+  <div class="provider-models-panel">
+    <div class="provider-models-head">
+      <div class="provider-models-title-wrap">
+        <h3 class="provider-models-title">{{ tm("models.configured") }}</h3>
+        <small v-if="availableCount" class="provider-models-subtitle"
+          >{{ tm("models.available") }} {{ availableCount }}</small
+        >
+      </div>
       <v-text-field
         v-model="modelSearchProxy"
         density="compact"
@@ -15,57 +15,37 @@
         hide-details
         variant="solo-filled"
         flat
-        class="ml-1"
-        style="max-width: 240px"
+        class="provider-models-search"
         :placeholder="tm('models.searchPlaceholder')"
       />
-      <v-spacer />
-      <v-btn
-        color="primary"
-        prepend-icon="mdi-download"
-        :loading="loadingModels"
-        variant="tonal"
-        size="small"
-        @click="emit('fetch-models')"
-      >
-        {{
-          isSourceModified
-            ? tm("providerSources.saveAndFetchModels")
-            : tm("providerSources.fetchModels")
-        }}
-      </v-btn>
-      <v-btn
-        color="primary"
-        prepend-icon="mdi-pencil-plus"
-        variant="text"
-        size="small"
-        class="ml-1"
-        @click="emit('open-manual-model')"
-      >
-        {{ tm("models.manualAddButton") }}
-      </v-btn>
+      <div class="provider-models-actions">
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-download"
+          :loading="loadingModels"
+          @click="emit('fetch-models')"
+          variant="tonal"
+          size="small"
+        >
+          {{
+            isSourceModified
+              ? tm("providerSources.saveAndFetchModels")
+              : tm("providerSources.fetchModels")
+          }}
+        </v-btn>
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-pencil-plus"
+          variant="text"
+          size="small"
+          @click="emit('open-manual-model')"
+        >
+          {{ tm("models.manualAddButton") }}
+        </v-btn>
+      </div>
     </div>
 
-    <v-list
-      density="compact"
-      class="rounded-lg border"
-      style="
-        max-height: 520px;
-        overflow-y: auto;
-        font-family:
-          system-ui,
-          -apple-system,
-          BlinkMacSystemFont,
-          &quot;Segoe UI&quot;,
-          Roboto,
-          Oxygen,
-          Ubuntu,
-          Cantarell,
-          &quot;Open Sans&quot;,
-          &quot;Helvetica Neue&quot;,
-          sans-serif;
-      "
-    >
+    <v-list density="compact" class="provider-models-list">
       <template v-if="entries.length > 0">
         <template
           v-for="entry in entries"
@@ -76,9 +56,9 @@
           "
         >
           <v-tooltip
-            v-if="entry.type === 'configured'"
             location="top"
             max-width="400"
+            v-if="entry.type === 'configured'"
           >
             <template #activator="{ props }">
               <v-list-item
@@ -90,8 +70,7 @@
                   {{ entry.provider.id }}
                 </v-list-item-title>
                 <v-list-item-subtitle
-                  class="text-caption text-grey d-flex align-center ga-1"
-                  style="font-family: monospace"
+                  class="provider-model-subtitle d-flex align-center ga-1"
                 >
                   <span>{{ entry.provider.model }}</span>
                   <v-icon
@@ -131,7 +110,7 @@
                       @update:modelValue="
                         emit('toggle-provider-enable', entry.provider, $event)
                       "
-                    />
+                    ></v-switch>
                     <v-tooltip location="top" max-width="300">
                       {{ tm("availability.test") }}
                       <template #activator="{ props }">
@@ -143,7 +122,7 @@
                           :loading="isProviderTesting(entry.provider.id)"
                           v-bind="props"
                           @click.stop="emit('test-provider', entry.provider)"
-                        />
+                        ></v-btn>
                       </template>
                     </v-tooltip>
 
@@ -158,7 +137,7 @@
                           @click.stop="
                             emit('open-provider-edit', entry.provider)
                           "
-                        />
+                        ></v-btn>
                       </template>
                     </v-tooltip>
 
@@ -168,7 +147,7 @@
                       variant="text"
                       color="error"
                       @click.stop="emit('delete-provider', entry.provider)"
-                    />
+                    ></v-btn>
                   </div>
                 </template>
               </v-list-item>
@@ -185,7 +164,7 @@
             </div>
           </v-tooltip>
 
-          <v-tooltip v-else location="top" max-width="400">
+          <v-tooltip location="top" max-width="400" v-else>
             <template #activator="{ props }">
               <v-list-item
                 v-bind="props"
@@ -194,7 +173,7 @@
               >
                 <v-list-item-title>{{ entry.model }}</v-list-item-title>
                 <v-list-item-subtitle
-                  class="text-caption text-grey d-flex align-center ga-1"
+                  class="provider-model-subtitle d-flex align-center ga-1"
                 >
                   <span>{{ entry.model }}</span>
                   <v-icon
@@ -228,7 +207,7 @@
                     size="small"
                     variant="text"
                     color="primary"
-                  />
+                  ></v-btn>
                 </template>
               </v-list-item>
             </template>
@@ -243,19 +222,15 @@
       </template>
       <template v-else>
         <div class="text-center pa-4 text-medium-emphasis">
-          <v-icon size="48" color="grey-lighten-1">
-            mdi-package-variant
-          </v-icon>
-          <p class="text-grey mt-2">
-            {{ tm("models.empty") }}
-          </p>
+          <v-icon size="48" color="grey-lighten-1">mdi-package-variant</v-icon>
+          <p class="text-grey mt-2">{{ tm("models.empty") }}</p>
         </div>
       </template>
     </v-list>
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { computed } from "vue";
 import { normalizeTextInput } from "@/utils/inputValue";
 
@@ -327,11 +302,100 @@ const isProviderTesting = (providerId) =>
 </script>
 
 <style scoped>
-.border {
-  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+.provider-models-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.provider-models-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.provider-models-title-wrap {
+  min-width: 0;
+}
+
+.provider-models-title {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 650;
+}
+
+.provider-models-subtitle {
+  display: block;
+  margin-top: 6px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+  font-size: 12px;
+}
+
+.provider-models-search {
+  max-width: 240px;
+}
+
+.provider-models-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.provider-models-list {
+  max-height: 520px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+  border-radius: 14px;
+  background: rgb(var(--v-theme-surface));
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    "Open Sans",
+    "Helvetica Neue",
+    sans-serif;
+}
+
+.provider-compact-item {
+  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.provider-models-list :deep(.v-list-item:last-child) {
+  border-bottom: 0;
+}
+
+.provider-model-subtitle {
+  color: rgba(var(--v-theme-on-surface), 0.62);
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 .cursor-pointer {
   cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .provider-models-head {
+    align-items: stretch;
+  }
+
+  .provider-models-search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .provider-models-actions {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 </style>

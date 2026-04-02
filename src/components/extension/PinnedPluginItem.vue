@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<script setup>
 import { computed } from "vue";
 import defaultPluginIcon from "@/assets/images/plugin_icon.png";
 
@@ -67,22 +67,38 @@ const authorDisplay = computed(() => {
   >
     <v-menu offset-y>
       <template #activator="{ props: menuProps }">
-        <v-avatar
-          v-bind="menuProps"
-          size="72"
-          class="pinned-avatar activator-avatar"
-          :title="plugin.display_name || plugin.name"
+        <div
+          class="d-flex flex-column align-center"
+          style="cursor: pointer; width: 80px"
         >
-          <img
-            :src="
-              typeof plugin.logo === 'string' && plugin.logo.trim()
-                ? plugin.logo
-                : defaultPluginIcon
+          <v-avatar
+            v-bind="menuProps"
+            size="72"
+            class="pinned-avatar activator-avatar mb-1"
+            :title="plugin.display_name || plugin.name"
+          >
+            <img
+              :src="
+                typeof plugin.logo === 'string' && plugin.logo.trim()
+                  ? plugin.logo
+                  : defaultPluginIcon
+              "
+              :alt="plugin.name"
+              @error="handlePinnedImgError"
+            />
+          </v-avatar>
+          <span
+            class="text-caption text-center text-truncate"
+            style="
+              width: 100%;
+              font-size: 0.75rem;
+              opacity: 0.9;
+              line-height: 1.2;
             "
-            :alt="plugin.name"
-            @error="handlePinnedImgError"
-          />
-        </v-avatar>
+          >
+            {{ plugin.display_name || plugin.name }}
+          </span>
+        </div>
       </template>
 
       <v-card>
@@ -215,13 +231,13 @@ const authorDisplay = computed(() => {
           <v-tooltip location="top" :text="tm('buttons.uninstall')">
             <template #activator="{ props: a }">
               <v-btn
-                v-if="!plugin.reserved"
                 v-bind="a"
                 icon
                 size="small"
                 variant="tonal"
                 color="error"
                 @click.stop="$emit('uninstall', plugin.name)"
+                v-if="!plugin.reserved"
               >
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
@@ -236,6 +252,7 @@ const authorDisplay = computed(() => {
       size="small"
       class="pinned-pin-btn"
       :color="isPinned ? 'primary' : 'secondary'"
+      @click.stop="$emit('toggle-pin', plugin)"
       :title="isPinned ? tm('buttons.unpin') : tm('buttons.pin')"
       style="
         position: absolute;
@@ -245,7 +262,6 @@ const authorDisplay = computed(() => {
         width: 22px;
         height: 22px;
       "
-      @click.stop="$emit('toggle-pin', plugin)"
     >
       <v-icon size="14">{{ isPinned ? "mdi-pin" : "mdi-pin-outline" }}</v-icon>
     </v-btn>
@@ -272,8 +288,7 @@ const authorDisplay = computed(() => {
 .pinned-card-wrapper {
   position: relative;
   display: inline-block;
-  width: 72px;
-  height: 72px;
+  width: 80px;
 }
 
 .pinned-item {

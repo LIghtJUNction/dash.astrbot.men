@@ -5,7 +5,7 @@ import vue from "@vitejs/plugin-vue";
 import vuetify from "vite-plugin-vuetify";
 import webfontDl from "vite-plugin-webfont-dl";
 import { cpSync, mkdirSync, existsSync } from "fs";
-import { join, resolve } from "path";
+import { resolve } from "path";
 
 const require = createRequire(import.meta.url);
 
@@ -30,7 +30,9 @@ function mdiFontDownload() {
       );
       const mdiDest = resolve(configDir, "public/fonts");
       if (!existsSync(mdiSource)) {
-        console.warn("[mdi-font] @mdi/font not found in node_modules, skipping download");
+        console.warn(
+          "[mdi-font] @mdi/font not found in node_modules, skipping download",
+        );
         return;
       }
       mkdirSync(mdiDest, { recursive: true });
@@ -75,7 +77,14 @@ export default defineConfig(({ command, mode }) => {
     },
     css: {
       preprocessorOptions: {
-        scss: {},
+        scss: {
+          api: "modern-compiler",
+          silenceDeprecations: ["import", "global-builtin", "if-function"],
+        },
+        sass: {
+          api: "modern-compiler",
+          silenceDeprecations: ["import", "global-builtin", "if-function"],
+        },
       },
     },
     build: {

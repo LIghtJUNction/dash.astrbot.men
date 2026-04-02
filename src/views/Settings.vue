@@ -51,25 +51,22 @@
           >
             <v-btn value="light" size="small">
               <v-icon class="mr-1" size="18">mdi-white-balance-sunny</v-icon>
-              {{ tm("theme.customize.light")}}
+              {{ tm("theme.customize.light") }}
             </v-btn>
             <v-btn value="dark" size="small">
               <v-icon class="mr-1" size="18">mdi-moon-waning-crescent</v-icon>
-              {{ tm("theme.customize.dark")}}
+              {{ tm("theme.customize.dark") }}
             </v-btn>
             <v-btn value="auto" size="small">
               <v-icon class="mr-1" size="18">mdi-sync</v-icon>
-              {{ tm("theme.customize.auto")}}
+              {{ tm("theme.customize.auto") }}
             </v-btn>
           </v-btn-toggle>
           <v-tooltip location="top">
             <template #activator="{ props }">
-              <v-icon
-                v-bind="props"
-                size="16"
-                color="primary"
-                class="ml-1"
-              >mdi-help-circle-outline</v-icon>
+              <v-icon v-bind="props" size="16" color="primary" class="ml-1"
+                >mdi-help-circle-outline</v-icon
+              >
             </template>
             <span>{{ tm("theme.customize.autoSwitchDesc") }}</span>
           </v-tooltip>
@@ -135,7 +132,9 @@
         <div class="d-flex flex-wrap ga-3 mb-4">
           <div>
             <div class="text-body-2 mb-1">{{ tm("system.backup.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.backup.subtitle") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.backup.subtitle") }}
+            </div>
             <v-btn color="primary" size="small" @click="openBackupDialog">
               <v-icon class="mr-1" size="16">mdi-backup-restore</v-icon>
               {{ tm("system.backup.button") }}
@@ -144,7 +143,9 @@
           <v-divider vertical class="mx-2 mx-md-4" />
           <div>
             <div class="text-body-2 mb-1">{{ tm("system.restart.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.restart.subtitle") }}</div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.restart.subtitle") }}
+            </div>
             <v-btn color="error" size="small" @click="restartAstrBot">
               <v-icon class="mr-1" size="16">mdi-restart</v-icon>
               {{ tm("system.restart.button") }}
@@ -152,9 +153,18 @@
           </div>
           <v-divider vertical class="mx-2 mx-md-4" />
           <div>
-            <div class="text-body-2 mb-1">{{ tm("system.migration.title") }}</div>
-            <div class="text-caption text-medium-emphasis mb-2">{{ tm("system.migration.subtitle") }}</div>
-            <v-btn color="primary" size="small" variant="outlined" @click="startMigration">
+            <div class="text-body-2 mb-1">
+              {{ tm("system.migration.title") }}
+            </div>
+            <div class="text-caption text-medium-emphasis mb-2">
+              {{ tm("system.migration.subtitle") }}
+            </div>
+            <v-btn
+              color="primary"
+              size="small"
+              variant="outlined"
+              @click="startMigration"
+            >
               <v-icon class="mr-1" size="16">mdi-database-import</v-icon>
               {{ tm("system.migration.button") }}
             </v-btn>
@@ -280,12 +290,16 @@
               <tbody>
                 <tr v-for="item in apiKeys" :key="item.key_id">
                   <td>{{ item.name }}</td>
-                  <td><code>{{ item.key_prefix }}</code></td>
+                  <td>
+                    <code>{{ item.key_prefix }}</code>
+                  </td>
                   <td>{{ (item.scopes || []).join(", ") }}</td>
                   <td>
                     <v-chip
                       size="small"
-                      :color="item.is_revoked || item.is_expired ? 'error' : 'success'"
+                      :color="
+                        item.is_revoked || item.is_expired ? 'error' : 'success'
+                      "
                       variant="tonal"
                     >
                       {{
@@ -338,7 +352,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import axios from "@/utils/request";
+import axios, { AxiosError } from "@/utils/request";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
 import ProxySelector from "@/components/shared/ProxySelector.vue";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
@@ -349,9 +363,21 @@ import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot"
 import { useModuleI18n } from "@/i18n/composables";
 import { useTheme } from "vuetify";
 import { BlueBusinessLightTheme } from "@/theme/BlueBusinessLightTheme";
-import { LIGHT_THEME_NAME, DARK_THEME_NAME } from "@/theme/constants";
+import {
+  LIGHT_THEME_NAME,
+  DARK_THEME_NAME,
+  ThemeMode,
+} from "@/theme/constants";
 import { useToastStore } from "@/stores/toast";
 import { useCustomizerStore } from "@/stores/customizer";
+import {
+  ApiKey,
+  ApiKeyActionResponse,
+  ApiKeyCreatePayload,
+  ApiKeyCreateResponse,
+  ApiKeyExpiresDays,
+  ApiKeyListResponse,
+} from "@/types/api";
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
@@ -364,7 +390,7 @@ const themeMode = computed({
     if (customizer.autoSwitchTheme) return "auto";
     return customizer.isDarkTheme ? "dark" : "light";
   },
-  set(mode: string) {
+  set(mode: ThemeMode) {
     if (mode === "auto") {
       customizer.SET_AUTO_SYNC(true);
       customizer.APPLY_SYSTEM_THEME();
@@ -377,7 +403,7 @@ const themeMode = computed({
   },
 });
 
-const getStoredColor = (key, fallback) => {
+const getStoredColor = (key: string, fallback: string) => {
   const stored =
     typeof window !== "undefined" ? localStorage.getItem(key) : null;
   return stored || fallback;
@@ -467,7 +493,10 @@ const applyThemePreset = (presetName: string) => {
   // Apply to themes
   applyThemeColors(preset.primary, preset.secondary);
 
-  toastStore.add({ message: tm("theme.customize.presetApplied") || "主题已应用", color: "success" });
+  toastStore.add({
+    message: tm("theme.customize.presetApplied") || "主题已应用",
+    color: "success",
+  });
 };
 
 const resolveThemes = () => {
@@ -476,7 +505,7 @@ const resolveThemes = () => {
   return null;
 };
 
-const applyThemeColors = (primary, secondary) => {
+const applyThemeColors = (primary: string, secondary: string) => {
   const themes = resolveThemes();
   if (!themes) return;
   [LIGHT_THEME_NAME, DARK_THEME_NAME].forEach((name) => {
@@ -505,13 +534,21 @@ watch(secondaryColor, (value) => {
   applyThemeColors(primaryColor.value, value);
 });
 
+const resetThemeColors = () => {
+  primaryColor.value = BlueBusinessLightTheme.colors.primary;
+  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
+  localStorage.removeItem("themePrimary");
+  localStorage.removeItem("themeSecondary");
+  applyThemeColors(primaryColor.value, secondaryColor.value);
+};
+
 const wfr = ref(null);
 const migrationDialog = ref(null);
 const backupDialog = ref(null);
-const apiKeys = ref([]);
+const apiKeys = ref<ApiKey[]>([]);
 const apiKeyCreating = ref(false);
 const newApiKeyName = ref("");
-const newApiKeyExpiresInDays = ref(30);
+const newApiKeyExpiresInDays = ref<ApiKeyExpiresDays>(30);
 const newApiKeyScopes = ref(["chat", "config", "file", "im"]);
 const createdApiKeyPlaintext = ref("");
 const apiKeyExpiryOptions = computed(() => [
@@ -529,7 +566,7 @@ const availableScopes = [
   { value: "im", label: "im" },
 ];
 
-const showToast = (message, color = "success") => {
+const showToast = (message: string, color = "success") => {
   toastStore.add({
     message,
     color,
@@ -537,7 +574,7 @@ const showToast = (message, color = "success") => {
   });
 };
 
-const formatDate = (value) => {
+const formatDate = (value: string | null) => {
   if (!value) return "-";
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return "-";
@@ -546,22 +583,27 @@ const formatDate = (value) => {
 
 const loadApiKeys = async () => {
   try {
-    const res = await axios.get("/api/apikey/list");
+    const res = await axios.get<ApiKeyListResponse>("/api/apikey/list");
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("apiKey.messages.loadFailed"), "error");
       return;
     }
-    apiKeys.value = res.data.data || [];
-  } catch (e) {
-    showToast(
-      e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
-      "error",
-    );
+    apiKeys.value = res.data.data;
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.loadFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while loading API keys:", e);
+      showToast(tm("apiKey.messages.loadFailed"), "error");
+    }
   }
 };
 
-const tryExecCommandCopy = (text) => {
-  let textArea = null;
+const tryExecCommandCopy = (text: string): boolean => {
+  let textArea: HTMLTextAreaElement | null = null;
   try {
     if (typeof document === "undefined" || !document.body) return false;
     textArea = document.createElement("textarea");
@@ -575,6 +617,7 @@ const tryExecCommandCopy = (text) => {
     textArea.focus();
     textArea.select();
     textArea.setSelectionRange(0, text.length);
+    // Fallback to deprecated execCommand for older browsers
     return document.execCommand("copy");
   } catch (_) {
     return false;
@@ -589,17 +632,21 @@ const tryExecCommandCopy = (text) => {
   }
 };
 
-const copyTextToClipboard = async (text) => {
+const copyTextToClipboard = async (text: string): Promise<boolean> => {
   if (!text) return false;
-  if (tryExecCommandCopy(text)) return true;
-  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText)
-    return false;
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch (_) {
-    return false;
+
+  // 由于execCommand被弃用，改用推荐的Clipboard API，但仍保留execCommand作为兼容性回退
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // Clipboard API failed, try fallback method
+    }
   }
+
+  // 回退到execCommand方法，兼容不支持Clipboard API的环境
+  return tryExecCommandCopy(text);
 };
 
 const copyCreatedApiKey = async () => {
@@ -623,14 +670,17 @@ const createApiKey = async () => {
   }
   apiKeyCreating.value = true;
   try {
-    const payload = {
+    const payload: ApiKeyCreatePayload = {
       name: newApiKeyName.value,
       scopes: selectedScopes,
     };
     if (newApiKeyExpiresInDays.value !== "permanent") {
       payload.expires_in_days = Number(newApiKeyExpiresInDays.value);
     }
-    const res = await axios.post("/api/apikey/create", payload);
+    const res = await axios.post<ApiKeyCreateResponse>(
+      "/api/apikey/create",
+      payload,
+    );
     if (res.data.status !== "ok") {
       showToast(
         res.data.message || tm("apiKey.messages.createFailed"),
@@ -643,19 +693,26 @@ const createApiKey = async () => {
     newApiKeyExpiresInDays.value = 30;
     showToast(tm("apiKey.messages.createSuccess"), "success");
     await loadApiKeys();
-  } catch (e) {
-    showToast(
-      e?.response?.data?.message || tm("apiKey.messages.createFailed"),
-      "error",
-    );
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.createFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while creating API key:", e);
+      showToast(tm("apiKey.messages.createFailed"), "error");
+    }
   } finally {
     apiKeyCreating.value = false;
   }
 };
 
-const revokeApiKey = async (keyId) => {
+const revokeApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post("/api/apikey/revoke", { key_id: keyId });
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/revoke", {
+      key_id: keyId,
+    });
     if (res.data.status !== "ok") {
       showToast(
         res.data.message || tm("apiKey.messages.revokeFailed"),
@@ -665,17 +722,24 @@ const revokeApiKey = async (keyId) => {
     }
     showToast(tm("apiKey.messages.revokeSuccess"), "success");
     await loadApiKeys();
-  } catch (e) {
-    showToast(
-      e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
-      "error",
-    );
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.revokeFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while revoking API key:", e);
+      showToast(tm("apiKey.messages.revokeFailed"), "error");
+    }
   }
 };
 
-const deleteApiKey = async (keyId) => {
+const deleteApiKey = async (keyId: string) => {
   try {
-    const res = await axios.post("/api/apikey/delete", { key_id: keyId });
+    const res = await axios.post<ApiKeyActionResponse>("/api/apikey/delete", {
+      key_id: keyId,
+    });
     if (res.data.status !== "ok") {
       showToast(
         res.data.message || tm("apiKey.messages.deleteFailed"),
@@ -685,19 +749,35 @@ const deleteApiKey = async (keyId) => {
     }
     showToast(tm("apiKey.messages.deleteSuccess"), "success");
     await loadApiKeys();
-  } catch (e) {
-    showToast(
-      e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
-      "error",
-    );
+  } catch (e: unknown) {
+    if (e instanceof AxiosError) {
+      showToast(
+        e?.response?.data?.message || tm("apiKey.messages.deleteFailed"),
+        "error",
+      );
+    } else {
+      console.error("An unexpected error occurred while deleting API key:", e);
+      showToast(tm("apiKey.messages.deleteFailed"), "error");
+    }
   }
 };
 
 const restartAstrBot = async () => {
   try {
     await restartAstrBotRuntime(wfr.value);
-  } catch (error) {
-    console.error(error);
+  } catch (error: unknown) {
+    if (error instanceof AxiosError) {
+      showToast(
+        error?.response?.data?.message || tm("apiKey.messages.restartFailed"),
+        "error",
+      );
+    } else {
+      console.error(
+        "An unexpected error occurred while restarting AstrBot:",
+        error,
+      );
+      showToast(tm("apiKey.messages.restartFailed"), "error");
+    }
   }
 };
 
@@ -718,14 +798,6 @@ const openBackupDialog = () => {
   if (backupDialog.value) {
     backupDialog.value.open();
   }
-};
-
-const resetThemeColors = () => {
-  primaryColor.value = BlueBusinessLightTheme.colors.primary;
-  secondaryColor.value = BlueBusinessLightTheme.colors.secondary;
-  localStorage.removeItem("themePrimary");
-  localStorage.removeItem("themeSecondary");
-  applyThemeColors(primaryColor.value, secondaryColor.value);
 };
 
 onMounted(() => {
