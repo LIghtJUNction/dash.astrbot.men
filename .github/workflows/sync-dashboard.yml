@@ -29,7 +29,7 @@ jobs:
       - name: Sync dashboard to root directory
         id: sync
         run: |
-          rsync -av --exclude=".git" --exclude=".github" /tmp/astrbot/dashboard/ ./
+          rsync -av --delete --exclude=".git" --exclude=".github" /tmp/astrbot/dashboard/ ./
 
           if git diff --quiet HEAD -- . ":!.github"; then
             if [ "$(git rev-parse HEAD 2>/dev/null)" != "" ] && [ "$(git ls-tree --name-only HEAD 2>/dev/null)" != "" ]; then
