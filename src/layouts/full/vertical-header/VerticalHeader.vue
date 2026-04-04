@@ -117,11 +117,11 @@ const releasesHeader = computed(() => [
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) =>
-    !!v || t("core.header.accountDialog.validation.passwordRequired"),
-  (v: string) =>
-    v.length >= 8 ||
-    t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) => !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) => v.length >= 12 || t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) => /[A-Z]/.test(v) || t("core.header.accountDialog.validation.passwordUppercase"),
+  (v: string) => /[a-z]/.test(v) || t("core.header.accountDialog.validation.passwordLowercase"),
+  (v: string) => /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit")
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) =>
@@ -525,7 +525,7 @@ watch(
   },
 );
 
-// Merry Christmas!
+// Merry Christmas! 🎄
 const isChristmas = computed(() => {
   const today = new Date();
   const month = today.getMonth() + 1; // getMonth() 返回 0-11
@@ -854,9 +854,11 @@ const isChristmas = computed(() => {
               overflow-y: auto;
             "
           >
-            <div class="markdown-content">
-              <MarkdownRender :content="releaseMessage" :typewriter="false" />
-            </div>
+            <MarkdownRender
+              :content="releaseMessage"
+              :typewriter="false"
+              class="markdown-content"
+            />
           </div>
 
           <div class="mb-4 mt-4">
@@ -1020,9 +1022,11 @@ const isChristmas = computed(() => {
         {{ selectedReleaseTag }}
       </v-card-title>
       <v-card-text style="font-size: 14px; max-height: 400px; overflow-y: auto">
-        <div class="markdown-content">
-          <MarkdownRender :content="selectedReleaseNotes" :typewriter="false" />
-        </div>
+        <MarkdownRender
+          :content="selectedReleaseNotes"
+          :typewriter="false"
+          class="markdown-content"
+        />
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -1197,6 +1201,10 @@ const isChristmas = computed(() => {
             class="mb-3"
           />
         </v-form>
+
+        <div class="text-caption text-medium-emphasis mt-2">
+          {{ t("core.header.accountDialog.form.defaultCredentials") }}
+        </div>
       </v-card-text>
 
       <v-divider />
@@ -1242,12 +1250,14 @@ const isChristmas = computed(() => {
 
 .markdown-content ol {
   padding-left: 24px;
+  /* Adds indentation to ordered lists */
   margin-top: 8px;
   margin-bottom: 8px;
 }
 
 .markdown-content ul {
   padding-left: 24px;
+  /* Adds indentation to unordered lists */
   margin-top: 8px;
   margin-bottom: 8px;
 }
