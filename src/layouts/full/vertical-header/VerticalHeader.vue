@@ -16,7 +16,6 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useLanguageSwitcher } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import AboutPage from "@/views/AboutPage.vue";
-import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 
 enableKatex();
 enableMermaid();
@@ -53,14 +52,12 @@ const password = ref("");
 const newPassword = ref("");
 const confirmPassword = ref("");
 const newUsername = ref("");
-const status = ref("");
 const updateStatus = ref("");
 const releaseMessage = ref("");
 const hasNewVersion = ref(false);
 const botCurrVersion = ref("");
 const dashboardHasNewVersion = ref(false);
 const dashboardCurrentVersion = ref("");
-const version = ref("");
 const releases = ref([]);
 const updatingDashboardLoading = ref(false);
 const installLoading = ref(false);
@@ -117,11 +114,19 @@ const releasesHeader = computed(() => [
 // Form validation
 const formValid = ref(true);
 const passwordRules = computed(() => [
-  (v: string) => !!v || t("core.header.accountDialog.validation.passwordRequired"),
-  (v: string) => v.length >= 12 || t("core.header.accountDialog.validation.passwordMinLength"),
-  (v: string) => /[A-Z]/.test(v) || t("core.header.accountDialog.validation.passwordUppercase"),
-  (v: string) => /[a-z]/.test(v) || t("core.header.accountDialog.validation.passwordLowercase"),
-  (v: string) => /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit")
+  (v: string) =>
+    !!v || t("core.header.accountDialog.validation.passwordRequired"),
+  (v: string) =>
+    v.length >= 12 ||
+    t("core.header.accountDialog.validation.passwordMinLength"),
+  (v: string) =>
+    /[A-Z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordUppercase"),
+  (v: string) =>
+    /[a-z]/.test(v) ||
+    t("core.header.accountDialog.validation.passwordLowercase"),
+  (v: string) =>
+    /\d/.test(v) || t("core.header.accountDialog.validation.passwordDigit"),
 ]);
 const confirmPasswordRules = computed(() => [
   (v: string) =>
@@ -297,7 +302,7 @@ async function accountEdit() {
       }, 2000);
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       accountEditStatus.value.error = true;
       accountEditStatus.value.message =
         typeof err === "string"
@@ -328,7 +333,7 @@ function getVersion() {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
     });
 }
 
@@ -351,12 +356,12 @@ function checkUpdate() {
     })
     .catch((err) => {
       if (err.response && err.response.status == 401) {
-        console.log("401");
+        console.info("401");
         const authStore = useAuthStore();
         authStore.logout();
         return;
       }
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     });
 }
@@ -371,7 +376,7 @@ function getReleases() {
       });
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
     });
 }
 
@@ -392,7 +397,7 @@ function switchVersion(version: string) {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     })
     .finally(() => {
@@ -414,7 +419,7 @@ function updateDashboard() {
       }
     })
     .catch((err) => {
-      console.log(err);
+      console.info(err);
       updateStatus.value = err;
     })
     .finally(() => {
