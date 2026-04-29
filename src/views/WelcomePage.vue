@@ -171,10 +171,80 @@
                   </div>
                 </div>
               </v-timeline-item>
+
+              <v-timeline-item
+                :dot-color="
+                  computerAccessStepState === 'completed' ? 'success' : 'primary'
+                "
+                icon="mdi-numeric-4"
+                fill-dot
+                size="small"
+              >
+                <div class="pl-2">
+                  <div class="d-flex align-center mb-1">
+                    <div class="text-h6 font-weight-bold">
+                      {{ tm("onboard.step3Title") }}
+                    </div>
+                    <v-btn
+                      icon
+                      variant="text"
+                      density="comfortable"
+                      size="small"
+                      class="ml-1"
+                      @click="showComputerAccessHelpDialog = true"
+                    >
+                      <span class="text-body-2 font-weight-bold">?</span>
+                    </v-btn>
+                  </div>
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    {{ tm("onboard.step3Desc") }}
+                  </p>
+                  <div class="d-flex flex-wrap align-center ga-3">
+                    <v-select
+                      v-model="computerAccessRuntime"
+                      :items="computerAccessOptions"
+                      item-title="title"
+                      item-value="value"
+                      :label="tm('onboard.step3SelectLabel')"
+                      :loading="savingComputerAccess"
+                      :disabled="savingComputerAccess"
+                      hide-details
+                      density="comfortable"
+                      variant="outlined"
+                      class="computer-access-select"
+                    />
+                  </div>
+                </div>
+              </v-timeline-item>
             </v-timeline>
           </v-card>
         </v-col>
       </v-row>
+
+      <v-dialog v-model="showComputerAccessHelpDialog" max-width="640">
+        <v-card>
+          <v-card-title class="text-h3 font-weight-bold pa-4">
+            {{ tm("onboard.step3HelpTitle") }}
+          </v-card-title>
+          <v-card-text>
+            <ol class="computer-access-help-list">
+              <li>{{ tm("onboard.step3HelpItem1") }}</li>
+              <li>{{ tm("onboard.step3HelpItem2") }}</li>
+              <li>{{ tm("onboard.step3HelpItem3") }}</li>
+            </ol>
+          </v-card-text>
+          <v-card-actions class="px-6 pb-4">
+            <v-spacer />
+            <v-btn
+              color="primary"
+              variant="text"
+              @click="showComputerAccessHelpDialog = false"
+            >
+              {{ tm("onboard.step3HelpClose") }}
+            </v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-dialog>
 
       <v-row class="px-4 mt-4">
         <v-col cols="12">
@@ -290,7 +360,33 @@ import { MarkdownRender } from "markstream-vue";
 import "markstream-vue/index.css";
 import "highlight.js/styles/github.css";
 
+interface ProviderPayloadItem {
+  [key: string]: unknown;
+  provider_type?: string;
+  provider_source_id?: string;
+  type?: string;
+  enable?: boolean;
+  id?: string;
+}
+
+interface ProviderSourceItem {
+  id: string;
+  provider_type: string;
+  [key: string]: unknown;
+}
+
+interface ApiError {
+  response?: {
+    status?: number;
+    data?: {
+      message?: string;
+    };
+  };
+  message?: string;
+}
+
 type StepState = "pending" | "completed" | "skipped";
+type ComputerAccessRuntime = "local" | "none";
 
 const { tm } = useModuleI18n("features/welcome");
 const { locale, t } = useI18n();
@@ -312,6 +408,11 @@ const apiBaseUrl = ref(apiStore.apiBaseUrl || "http://127.0.0.1:6185");
 
 const platformStepState = ref<StepState>("pending");
 const providerStepState = ref<StepState>("pending");
+const showComputerAccessHelpDialog = ref(false);
+const computerAccessStepState = ref<StepState>("pending");
+const computerAccessRuntime = ref<ComputerAccessRuntime>("none");
+const savedComputerAccessRuntime = ref<ComputerAccessRuntime>("none");
+const savingComputerAccess = ref(false);
 const welcomeAnnouncementRaw = ref<unknown>(null);
 
 function resolveWelcomeAnnouncement(raw: unknown, currentLocale: string) {
@@ -446,10 +547,11 @@ async function checkAndSaveBackend() {
     if ((platformConfigData.value.platform || []).length > 0) {
       platformStepState.value = "completed";
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     setApiBaseUrl(originalBase);
     backendStepState.value = "pending";
-    if (error?.response?.status === 401) {
+    const apiErr = error as ApiError;
+    if (apiErr?.response?.status === 401) {
       showError("无访问权限！请点击右上角退出登录！");
     } else {
       showError(`Failed to connect to backend: ${error}`);
@@ -459,13 +561,15 @@ async function checkAndSaveBackend() {
   }
 }
 
-function getChatProvidersFromTemplatePayload(payload: any) {
-  const providers = payload?.providers || [];
-  const sources = payload?.provider_sources || [];
-  const sourceMap = new Map();
-  sources.forEach((s: any) => sourceMap.set(s.id, s.provider_type));
+function getChatProvidersFromTemplatePayload(payload: Record<string, unknown>) {
+  const providers: ProviderPayloadItem[] = (payload?.providers as ProviderPayloadItem[] | undefined) || [];
+  const sources: ProviderSourceItem[] = (payload?.provider_sources as ProviderSourceItem[] | undefined) || [];
+  const sourceMap = new Map<string, string>();
+  sources.forEach((s: ProviderSourceItem) => {
+    sourceMap.set(s.id, s.provider_type);
+  });
 
-  return providers.filter((provider: any) => {
+  return providers.filter((provider: ProviderPayloadItem) => {
     if (provider.provider_type) {
       return provider.provider_type === "chat_completion";
     }
@@ -477,6 +581,13 @@ function getChatProvidersFromTemplatePayload(payload: any) {
   });
 }
 
+async function fetchDefaultConfig() {
+  const res = await axios.get("/api/config/abconf", {
+    params: { id: "default" },
+  });
+  return res.data?.data?.config || {};
+}
+
 async function fetchChatProviders() {
   const response = await axios.get("/api/config/provider/template");
   if (response.data.status !== "ok") {
@@ -485,7 +596,7 @@ async function fetchChatProviders() {
   return getChatProvidersFromTemplatePayload(response.data.data);
 }
 
-function pickDefaultProviderId(providers: any[]) {
+function pickDefaultProviderId(providers: ProviderPayloadItem[]) {
   if (!providers.length) return "";
   const enabledProvider = providers.find(
     (provider) => provider.enable !== false,
@@ -565,10 +676,73 @@ onMounted(async () => {
       } catch (e) {
         console.error(e);
       }
+
+      try {
+        const defaultConfig = await fetchDefaultConfig();
+        syncComputerAccessRuntime(defaultConfig);
+      } catch (e) {
+        console.error(e);
+      }
     } catch (e) {
       // Backend configured but not reachable
       backendStepState.value = "pending";
     }
+  }
+});
+
+function normalizeComputerAccessRuntime(runtime: unknown): ComputerAccessRuntime {
+  if (runtime === "local") return "local";
+  return "none";
+}
+
+function syncComputerAccessRuntime(configData: any) {
+  const currentRuntime = configData?.provider_settings?.computer_use_runtime;
+  const normalizedRuntime = normalizeComputerAccessRuntime(currentRuntime);
+  computerAccessRuntime.value = normalizedRuntime;
+  savedComputerAccessRuntime.value = normalizedRuntime;
+  if (normalizedRuntime !== "none") {
+    computerAccessStepState.value = "completed";
+  }
+}
+
+const computerAccessOptions = computed(() => [
+  { title: tm("onboard.step3Allow"), value: "local" },
+  { title: tm("onboard.step3Deny"), value: "none" },
+]);
+
+async function saveComputerAccessRuntime() {
+  savingComputerAccess.value = true;
+  try {
+    const configData = await fetchDefaultConfig();
+    if (!configData.provider_settings) {
+      configData.provider_settings = {};
+    }
+    configData.provider_settings.computer_use_runtime =
+      computerAccessRuntime.value;
+    const updateRes = await axios.post("/api/config/astrbot/update", {
+      conf_id: "default",
+      config: configData,
+    });
+    if (updateRes.data.status !== "ok") {
+      throw new Error(updateRes.data.message || "保存失败");
+    }
+    savedComputerAccessRuntime.value = computerAccessRuntime.value;
+    computerAccessStepState.value = "completed";
+  } catch (err: unknown) {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
+  } finally {
+    savingComputerAccess.value = false;
+  }
+}
+
+watch(computerAccessRuntime, async (value, oldValue) => {
+  if (value === oldValue) return;
+  if (value === savedComputerAccessRuntime.value) return;
+  if (savingComputerAccess.value) return;
+  try {
+    await saveComputerAccessRuntime();
+  } catch {
+    computerAccessRuntime.value = savedComputerAccessRuntime.value;
   }
 });
 
@@ -580,10 +754,11 @@ async function openPlatformDialog() {
       platformConfigData.value.platform || []
     ).length;
     showAddPlatformDialog.value = true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.platformLoadFailed"),
     );
   } finally {
@@ -596,10 +771,11 @@ async function openProviderDialog() {
     const providers = await fetchChatProviders();
     providerCountBeforeOpen.value = providers.length;
     showProviderDialog.value = true;
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.providerLoadFailed"),
     );
   }
@@ -613,10 +789,11 @@ watch(showAddPlatformDialog, async (visible, wasVisible) => {
     if (newCount > platformCountBeforeOpen.value) {
       platformStepState.value = "completed";
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.platformLoadFailed"),
     );
   }
@@ -630,10 +807,11 @@ watch(showProviderDialog, async (visible, wasVisible) => {
       providerStepState.value = "completed";
       await syncDefaultConfigProviderIfNeeded();
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const apiErr = err as ApiError;
     showError(
-      err?.response?.data?.message ||
-        err?.message ||
+      apiErr?.response?.data?.message ||
+        apiErr?.message ||
         tm("onboard.providerUpdateFailed"),
     );
   }
@@ -643,6 +821,16 @@ watch(showProviderDialog, async (visible, wasVisible) => {
 <style scoped>
 .welcome-page {
   height: 100%;
+}
+
+.computer-access-select {
+  max-width: 240px;
+  min-width: 220px;
+}
+
+.computer-access-help-list {
+  margin: 0;
+  padding-left: 1.25rem;
 }
 
 .welcome-card {
