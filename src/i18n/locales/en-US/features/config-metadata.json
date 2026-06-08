@@ -11,13 +11,7 @@
         },
         "agent_runner_type": {
           "description": "Runner",
-          "labels": [
-            "Built-in Agent",
-            "Dify",
-            "Coze",
-            "Alibaba Cloud Bailian Application",
-            "DeerFlow"
-          ]
+          "labels": ["Built-in Agent", "Dify", "Coze", "Alibaba Cloud Bailian Application", "DeerFlow"]
         },
         "coze_agent_runner_provider_id": {
           "description": "Coze Agent Runner Provider ID"
@@ -170,10 +164,6 @@
           "booter": {
             "description": "Sandbox Environment Driver"
           },
-          "bwrap_rw_binds": {
-            "description": "Bubblewrap Read & Write Binds",
-            "hint": "Additional read-write mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. /tmp and /var/tmp are read-write by default)."
-          },
           "bwrap_ro_binds": {
             "description": "Bubblewrap Read Only Binds",
             "hint": "Additional read-only mount directories for the Bubblewrap sandbox (press Enter to add, multiple can be added. Host system directories /usr, /etc, /opt are mounted read-only at the same location by default)."
@@ -267,19 +257,16 @@
         },
         "context_limit_reached_strategy": {
           "description": "Handling for History Limits or Context Window Pressure",
-          "labels": [
-            "Truncate by Turns",
-            "Compress by LLM"
-          ],
+          "labels": ["Truncate by Turns", "Compress by LLM"],
           "hint": "Persistent conversation history uses this strategy only after exceeding 'Max Turns Before Compression'. Before each request, the same strategy may also protect the in-flight context when tokens approach the model window."
         },
         "llm_compress_instruction": {
           "description": "Context Compression Instruction",
           "hint": "If empty, the default prompt will be used."
         },
-        "llm_compress_keep_recent": {
-          "description": "Keep Recent Turns When Compressing",
-          "hint": "Always keep the most recent N turns of conversation when compressing context."
+        "llm_compress_keep_recent_ratio": {
+          "description": "Recent Context Token Ratio to Keep",
+          "hint": "Keep recent exact context by current context token ratio, from 0-0.3. 0.15 means keeping 15%; values above 0 keep at least the latest round."
         },
         "llm_compress_provider_id": {
           "description": "Model Provider ID for Context Compression",
@@ -363,10 +350,7 @@
         "tool_schema_mode": {
           "description": "Tool Schema Mode",
           "hint": "Lazy-tool-load sends name/description first and re-queries for parameters; Full sends the complete schema in one step.",
-          "labels": [
-            "Lazy-tool-load (two-stage)",
-            "Full schema"
-          ]
+          "labels": ["Lazy-tool-load (two-stage)", "Full schema"]
         },
         "streaming_response": {
           "description": "Streaming Output"
@@ -374,10 +358,7 @@
         "unsupported_streaming_strategy": {
           "description": "Platforms Without Streaming Support",
           "hint": "Select the handling method for platforms that don't support streaming responses. Real-time segmented reply sends content immediately when the system detects segment points like punctuation during streaming reception",
-          "labels": [
-            "Real-time Segmented Reply",
-            "Disable Streaming Response"
-          ]
+          "labels": ["Real-time Segmented Reply", "Disable Streaming Response"]
         },
         "wake_prefix": {
           "description": "Additional LLM Chat Wake Prefix",
@@ -479,10 +460,7 @@
       },
       "lark_connection_mode": {
         "description": "Subscription Mode",
-        "labels": [
-          "Long Connection Mode",
-          "Webhook Server Mode"
-        ]
+        "labels": ["Long Connection Mode", "Webhook Server Mode"]
       },
       "lark_encrypt_key": {
         "description": "Encrypt Key",
@@ -797,7 +775,7 @@
       },
       "disable_builtin_commands": {
         "description": "Disable Built-in Commands",
-        "hint": "Disable all built-in AstrBot commands such as help, provider, model, etc."
+        "hint": "Disable all built-in AstrBot commands such as help, sid, new, etc."
       }
     },
     "whitelist": {
@@ -971,10 +949,7 @@
           "split_mode": {
             "description": "Split Mode",
             "hint": "Used to segment a message. By default, it will be separated by punctuation marks like period, question mark, etc. For example, filling `[。？！]` will remove all periods, question marks, and exclamation marks. re.findall(r'<regex>', text)",
-            "labels": [
-              "Regex",
-              "Words List"
-            ]
+            "labels": ["Regex", "Words List"]
           },
           "regex": {
             "description": "Segmentation Regular Expression",
@@ -1096,6 +1071,24 @@
         "hint": "When disabled, AstrBot will not upload anonymous usage statistics."
       },
       "dashboard": {
+        "trust_proxy_headers": {
+          "description": "Trust Proxy Headers for Client IP",
+          "hint": "When disabled, ignore X-Forwarded-For/X-Real-IP and use the connection address only."
+        },
+        "auth_rate_limit": {
+          "enable": {
+            "description": "Enable Login Rate Limiting",
+            "hint": "When disabled, authentication endpoints (login, TOTP, etc.) will not be rate-limited."
+          },
+          "average_interval": {
+            "description": "Endpoint Rate Limit Average Interval (seconds)",
+            "hint": "Minimum average interval between authentication requests. For example, 1.0 means at most 1 request per second."
+          },
+          "max_burst": {
+            "description": "Endpoint Rate Limit Max Burst",
+            "hint": "Maximum number of consecutive burst requests allowed. For example, 3 allows up to 3 requests in a short burst."
+          }
+        },
         "ssl": {
           "enable": {
             "description": "Enable WebUI HTTPS",
@@ -1113,6 +1106,52 @@
             "description": "SSL CA Certificate File Path",
             "hint": "Optional. Path to CA certificate file."
           }
+        },
+        "totp": {
+          "enable": {
+            "description": "Enable WebUI TOTP",
+            "hint": "When enabled, a TOTP code is required during dashboard login."
+          },
+          "manage": "Manage",
+          "configuration": "TOTP",
+          "statusPending": "Setup required",
+          "statusEnabled": "Enabled",
+          "setupRequiredHint": "TOTP is enabled but not yet configured. Click Manage to complete setup.",
+          "setupTitle": "Set up TOTP",
+          "setupSubtitle": "Scan this QR code in your authenticator app, then enter a verification code.",
+          "setupConfirm": "Verify and continue",
+          "activeSubtitle": "Use this QR code or secret to add another authenticator device.",
+          "rotateTitle": "Rotate TOTP Secret",
+          "rotateSubtitle": "Generate a new secret, then enter a code from your authenticator to confirm the replacement.",
+          "rotate": "Rotate",
+          "rotateRecovery": "Rotate Recovery Code",
+          "rotateConfirm": "Confirm Rotation",
+          "rotateCancel": "Cancel",
+          "rotateCode": "Verification Code",
+          "rotateCodeHint": "Enter the code from your authenticator app to confirm the new key.",
+          "rotateError": "Invalid code, please try again.",
+          "recoveryTitle": "Recovery Codes",
+          "recoverySubtitle": "This recovery code is shown once. Save it before continuing.",
+          "recoveryWarning": "If lost, account access cannot be restored through normal means.",
+          "recoveryAcknowledge": "I have saved my recovery codes",
+          "recoveryClose": "Done",
+          "disableTitle": "Disable TOTP",
+          "disableSubtitle": "Enter a verification code to disable two-factor authentication.",
+          "disableRecoverySubtitle": "Enter a recovery code to disable two-factor authentication.",
+          "disableCode": "Verification Code",
+          "disableRecoveryCode": "Recovery Code",
+          "disableConfirm": "Disable",
+          "disableCancel": "Cancel",
+          "disableError": "Verification failed. Please try again.",
+          "disableUseRecovery": "Can't use TOTP?",
+          "disableUseCode": "Use verification code",
+          "configSaveTitle": "Two-Factor Verification",
+          "configSaveSubtitle": "Enter a verification code to change protected configuration.",
+          "configSaveRotationHint": "When rotating TOTP keys, both the old and new verification codes are accepted (allowed once per rotation operation).",
+          "configSaveCode": "Verification Code",
+          "configSaveConfirm": "Continue",
+          "configSaveCancel": "Cancel",
+          "configSaveError": "Verification failed. Please try again."
         }
       },
       "timezone": {
@@ -1165,22 +1204,22 @@
         "hint": "Only effective for qwen3-rerank models. Recommended to write in English."
       },
       "nvidia_rerank_api_base": {
-          "description": "API Base URL"
+        "description": "API Base URL"
       },
       "nvidia_rerank_api_key": {
-          "description": "API Key"
+        "description": "API Key"
       },
       "nvidia_rerank_model": {
-          "description": "Rerank Model Name",
-          "hint": "Please refer to the NVIDIA Docs for the model name."
+        "description": "Rerank Model Name",
+        "hint": "Please refer to the NVIDIA Docs for the model name."
       },
       "nvidia_rerank_model_endpoint": {
-          "description": "Custom Model Endpoint",
-          "hint": "Custom URL suffix endpoint, defaults to /reranking."
+        "description": "Custom Model Endpoint",
+        "hint": "Custom URL suffix endpoint, defaults to /reranking."
       },
       "nvidia_rerank_truncate": {
-          "description": "Text Truncation Strategy",
-          "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
+        "description": "Text Truncation Strategy",
+        "hint": "Whether to truncate the input to fit the model's maximum context length when the input text is too long."
       },
       "launch_model_if_not_running": {
         "description": "Auto-start model if not running",
@@ -1189,12 +1228,7 @@
       "modalities": {
         "description": "Model capabilities",
         "hint": "Modalities supported by the model. If the model does not support images, uncheck image.",
-        "labels": [
-          "Text",
-          "Image",
-          "Audio",
-          "Tool use"
-        ]
+        "labels": ["Text", "Image", "Audio", "Tool use"]
       },
       "custom_headers": {
         "description": "Custom request headers",

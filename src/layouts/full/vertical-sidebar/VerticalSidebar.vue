@@ -1,15 +1,39 @@
 <script setup lang="ts">
-import { ref, shallowRef, onMounted, onUnmounted, watch } from "vue";
-import { useCustomizerStore } from "../../../stores/customizer";
-import { useI18n } from "@/i18n/composables";
-import sidebarItems from "./sidebarItem";
-import NavItem from "./NavItem.vue";
-import { applySidebarCustomization } from "@/utils/sidebarCustomization";
+import { onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import ChangelogDialog from "@/components/shared/ChangelogDialog.vue";
+import { usePluginSidebarItems } from "@/composables/usePluginSidebarItems";
+import { useI18n } from "@/i18n/composables";
+import { applySidebarCustomization } from "@/utils/sidebarCustomization";
+import { useCustomizerStore } from "../../../stores/customizer";
+import NavItem from "./NavItem.vue";
+import sidebarItems, { MORE_GROUP_KEY } from "./sidebarItem";
 
 const { t, locale } = useI18n();
 
 const customizer = useCustomizerStore();
+const { pluginItems } = usePluginSidebarItems();
+
+function buildSidebarMenu() {
+  const base = applySidebarCustomization(sidebarItems);
+  if (!pluginItems.value?.children?.length) return base;
+
+  const result = [];
+
+  for (const item of base) {
+    if (item.title === MORE_GROUP_KEY) {
+      result.push(pluginItems.value);
+      result.push(item);
+    } else {
+      result.push(item);
+    }
+  }
+
+  if (!base.some((item) => item.title === MORE_GROUP_KEY)) {
+    result.push(pluginItems.value);
+  }
+
+  return result;
+}
 
 function collectGroupValues(items, values = new Set()) {
   items.forEach((item) => {
@@ -27,39 +51,38 @@ function sanitizeOpenedItems(items, menuItems) {
   }
 
   const groupValues = collectGroupValues(menuItems);
-  return items.filter(
-    (item) => typeof item === "string" && groupValues.has(item),
-  );
+  return items.filter((item) => typeof item === "string" && groupValues.has(item));
 }
 
 function getInitialOpenedItems(menuItems) {
   try {
-    const stored = JSON.parse(
-      localStorage.getItem("sidebar_openedItems") || "[]",
-    );
+    const stored = JSON.parse(localStorage.getItem("sidebar_openedItems") || "[]");
     return sanitizeOpenedItems(stored, menuItems);
   } catch {
     return [];
   }
 }
 
-const sidebarMenu = shallowRef(applySidebarCustomization(sidebarItems));
+const sidebarMenu = shallowRef(buildSidebarMenu());
 
 // 侧边栏分组展开状态持久化
 const openedItems = ref(getInitialOpenedItems(sidebarMenu.value));
 watch(
   openedItems,
   (val) => {
-    localStorage.setItem(
-      "sidebar_openedItems",
-      JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)),
-    );
+    localStorage.setItem("sidebar_openedItems", JSON.stringify(sanitizeOpenedItems(val, sidebarMenu.value)));
   },
   { deep: true },
 );
 
+// 当插件项变化时（如插件启用/停用），刷新菜单
+watch(pluginItems, () => {
+  sidebarMenu.value = buildSidebarMenu();
+  openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
+});
+
 function refreshSidebarMenu() {
-  sidebarMenu.value = applySidebarCustomization(sidebarItems);
+  sidebarMenu.value = buildSidebarMenu();
   openedItems.value = sanitizeOpenedItems(openedItems.value, sidebarMenu.value);
 }
 
@@ -81,10 +104,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener("storage", handleStorageChange);
-  window.removeEventListener(
-    "sidebar-customization-changed",
-    handleCustomEvent,
-  );
+  window.removeEventListener("sidebar-customization-changed", handleCustomEvent);
 });
 
 const showIframe = ref(false);
@@ -159,9 +179,7 @@ function openIframeLink(url) {
 
 function openFaqLink() {
   const faqUrl =
-    locale.value === "en-US"
-      ? "https://docs.astrbot.app/en/faq.html"
-      : "https://docs.astrbot.app/faq.html";
+    locale.value === "en-US" ? "https://docs.astrbot.app/en/faq.html" : "https://docs.astrbot.app/faq.html";
   openIframeLink(faqUrl);
 }
 
@@ -221,19 +239,11 @@ function onTouchEnd() {
 
 function moveAt(clientX, clientY) {
   const dm = document.getElementById("draggable-iframe");
-  const newLeft = clamp(
-    clientX - offsetX,
-    0,
-    window.innerWidth - dm.offsetWidth,
-  );
-  const newTop = clamp(
-    clientY - offsetY,
-    0,
-    window.innerHeight - dm.offsetHeight,
-  );
+  const newLeft = clamp(clientX - offsetX, 0, window.innerWidth - dm.offsetWidth);
+  const newTop = clamp(clientY - offsetY, 0, window.innerHeight - dm.offsetHeight);
   // 将拖拽后的位置同步到响应式样式变量中
-  iframeStyle.value.left = newLeft + "px";
-  iframeStyle.value.top = newTop + "px";
+  iframeStyle.value.left = `${newLeft}px`;
+  iframeStyle.value.top = `${newTop}px`;
 }
 
 function endDrag() {
@@ -250,6 +260,12 @@ function startSidebarResize(event) {
   document.body.style.userSelect = "none";
   document.body.style.cursor = "ew-resize";
 
+  // 拖拽时禁用 iframe 的 pointer-events，防止 iframe 截获 mousemove 事件导致拖拽卡住
+  const iframes = document.querySelectorAll(".plugin-page-frame") as NodeListOf<HTMLElement>;
+  iframes.forEach((el) => {
+    el.style.pointerEvents = "none";
+  });
+
   const startX = event.clientX;
   const startWidth = sidebarWidth.value;
 
@@ -257,10 +273,7 @@ function startSidebarResize(event) {
     if (!isResizing.value) return;
 
     const deltaX = event.clientX - startX;
-    const newWidth = Math.max(
-      minSidebarWidth,
-      Math.min(maxSidebarWidth, startWidth + deltaX),
-    );
+    const newWidth = Math.max(minSidebarWidth, Math.min(maxSidebarWidth, startWidth + deltaX));
     sidebarWidth.value = newWidth;
   }
 
@@ -268,6 +281,9 @@ function startSidebarResize(event) {
     isResizing.value = false;
     document.body.style.userSelect = "";
     document.body.style.cursor = "";
+    iframes.forEach((el) => {
+      el.style.pointerEvents = "";
+    });
     document.removeEventListener("mousemove", onMouseMoveResize);
     document.removeEventListener("mouseup", onMouseUpResize);
   }
@@ -282,9 +298,7 @@ function formatNumber(num) {
 
 async function fetchStarCount() {
   try {
-    const response = await fetch(
-      "https://cloud.astrbot.app/api/v1/github/repo-info",
-    );
+    const response = await fetch("https://cloud.astrbot.app/api/v1/github/repo-info");
     const data = await response.json();
     if (data.data && data.data.stargazers_count) {
       starCount.value = data.data.stargazers_count;

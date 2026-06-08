@@ -49,6 +49,8 @@ export function clearSidebarCustomization() {
  * @param {boolean} [options.assembleMoreGroup=false] - 是否组装带更多分组的整体数组
  * @returns {{ mainItems: Array, moreItems: Array, merged?: Array }}
  */
+import { MORE_GROUP_KEY } from "@/layouts/full/vertical-sidebar/sidebarItem";
+
 export function resolveSidebarItems(defaultItems, customization, options = {}) {
   const { cloneItems = false, assembleMoreGroup = false } = options;
 
@@ -73,7 +75,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   // 收集所有条目，按 title 建索引
   defaultItems.forEach((item) => {
-    if (item.children && item.title === "core.navigation.groups.more") {
+    if (item.children && item.title === MORE_GROUP_KEY) {
       item.children.forEach((child) => {
         all.set(child.title, cloneItems ? { ...child } : child);
         defaultMore.push(child.title);
@@ -85,12 +87,8 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
   });
 
   const hasCustomization = Boolean(customization);
-  let mainKeys = hasCustomization
-    ? normalizeKeys(customization.mainItems || [])
-    : [...defaultMain];
-  let moreKeys = hasCustomization
-    ? normalizeKeys(customization.moreItems || [])
-    : [...defaultMore];
+  let mainKeys = hasCustomization ? normalizeKeys(customization.mainItems || []) : [...defaultMain];
+  let moreKeys = hasCustomization ? normalizeKeys(customization.moreItems || []) : [...defaultMore];
 
   if (hasCustomization) {
     mainKeys = mainKeys.filter((title) => all.has(title));
@@ -103,9 +101,7 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
     moreKeys = moreKeys.filter((title) => !mainSet.has(title));
   }
 
-  const used = hasCustomization
-    ? new Set([...mainKeys, ...moreKeys])
-    : new Set(defaultMain.concat(defaultMore));
+  const used = hasCustomization ? new Set([...mainKeys, ...moreKeys]) : new Set(defaultMain.concat(defaultMore));
 
   const mainItems = mainKeys.map((title) => all.get(title)).filter(Boolean);
 
@@ -133,14 +129,12 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
 
   let merged;
   if (assembleMoreGroup) {
-    const children = cloneItems
-      ? moreItems.map((item) => ({ ...item }))
-      : [...moreItems];
+    const children = cloneItems ? moreItems.map((item) => ({ ...item })) : [...moreItems];
     if (children.length > 0) {
       merged = [
         ...mainItems,
         {
-          title: "core.navigation.groups.more",
+          title: MORE_GROUP_KEY,
           icon: "mdi-dots-horizontal",
           children,
         },
@@ -166,19 +160,14 @@ export function resolveSidebarItems(defaultItems, customization, options = {}) {
  */
 export function applySidebarCustomization(defaultItems) {
   const customization = getSidebarCustomization();
-  const { merged, normalizedMainKeys, normalizedMoreKeys } =
-    resolveSidebarItems(defaultItems, customization, {
-      cloneItems: true,
-      assembleMoreGroup: true,
-    });
+  const { merged, normalizedMainKeys, normalizedMoreKeys } = resolveSidebarItems(defaultItems, customization, {
+    cloneItems: true,
+    assembleMoreGroup: true,
+  });
 
   if (customization) {
-    const rawMainKeys = Array.isArray(customization.mainItems)
-      ? customization.mainItems
-      : [];
-    const rawMoreKeys = Array.isArray(customization.moreItems)
-      ? customization.moreItems
-      : [];
+    const rawMainKeys = Array.isArray(customization.mainItems) ? customization.mainItems : [];
+    const rawMoreKeys = Array.isArray(customization.moreItems) ? customization.moreItems : [];
     const hasChanged =
       JSON.stringify(rawMainKeys) !== JSON.stringify(normalizedMainKeys) ||
       JSON.stringify(rawMoreKeys) !== JSON.stringify(normalizedMoreKeys);

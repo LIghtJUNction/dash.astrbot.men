@@ -167,17 +167,38 @@
               <div class="umo-source-cell">
                 <div class="umo-source-content">
                   <template v-if="umoDisplayMode === 'parsed'">
-                    <v-chip size="x-small" label>
-                      {{ item.sessionInfo.platform || tm("status.unknown") }}
-                    </v-chip>
-                    <span class="umo-separator">:</span>
-                    <v-chip size="x-small" label>
-                      {{ getMessageTypeDisplay(item.sessionInfo.messageType) }}
-                    </v-chip>
-                    <span class="umo-separator">:</span>
-                    <span class="umo-session-id">{{
-                      item.sessionInfo.sessionId || tm("status.unknown")
-                    }}</span>
+                    <div class="conversation-umo-stack">
+                      <UmoDisplay
+                        v-if="hasConversationUmoReadableName(item)"
+                        v-bind="getConversationUmoDisplayProps(item)"
+                        compact
+                        :show-info="false"
+                        :show-platform="false"
+                        :show-meta="false"
+                        class="conversation-umo-display"
+                      />
+                      <div class="conversation-umo-parsed">
+                        <v-chip size="x-small" label>
+                          {{
+                            getConversationUmoInfo(item).platform ||
+                            tm("status.unknown")
+                          }}
+                        </v-chip>
+                        <span class="umo-separator">:</span>
+                        <v-chip size="x-small" label>
+                          {{
+                            getMessageTypeDisplay(
+                              getConversationUmoInfo(item).message_type,
+                            )
+                          }}
+                        </v-chip>
+                        <span class="umo-separator">:</span>
+                        <span class="umo-session-id">{{
+                          getConversationUmoInfo(item).session_id ||
+                          tm("status.unknown")
+                        }}</span>
+                      </div>
+                    </div>
                   </template>
                   <span v-else class="umo-raw-text">{{
                     item.user_id || tm("status.unknown")
@@ -294,25 +315,47 @@
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
       <v-card class="conversation-detail-card">
-        <v-card-title class="ml-2 mt-2 d-flex align-center">
-          <span class="text-truncate">{{
-            selectedConversation?.title || tm("status.noTitle")
-          }}</span>
-          <v-spacer></v-spacer>
-          <div
-            class="d-flex align-center"
-            v-if="selectedConversation?.sessionInfo"
-          >
-            <v-chip text-color="primary" size="small" class="mr-2" rounded="md">
-              {{ selectedConversation.sessionInfo.platform }}
-            </v-chip>
-            <v-chip text-color="secondary" size="small" rounded="md">
-              {{
-                getMessageTypeDisplay(
-                  selectedConversation.sessionInfo.messageType,
-                )
-              }}
-            </v-chip>
+        <v-card-title class="ml-2 mt-2 conversation-detail-title">
+          <div class="conversation-detail-heading">
+            <span class="text-truncate">{{
+              selectedConversation?.title || tm("status.noTitle")
+            }}</span>
+            <UmoDisplay
+              v-if="
+                selectedConversation?.user_id &&
+                hasConversationUmoReadableName(selectedConversation)
+              "
+              v-bind="getConversationUmoDisplayProps(selectedConversation)"
+              compact
+              :show-info="false"
+              :show-platform="false"
+              :show-meta="false"
+              class="conversation-umo-display"
+            />
+            <div
+              v-if="selectedConversation?.user_id"
+              class="conversation-umo-parsed conversation-detail-umo-parsed"
+            >
+              <v-chip size="x-small" label>
+                {{
+                  getConversationUmoInfo(selectedConversation).platform ||
+                  tm("status.unknown")
+                }}
+              </v-chip>
+              <span class="umo-separator">:</span>
+              <v-chip size="x-small" label>
+                {{
+                  getMessageTypeDisplay(
+                    getConversationUmoInfo(selectedConversation).message_type,
+                  )
+                }}
+              </v-chip>
+              <span class="umo-separator">:</span>
+              <span class="umo-session-id">{{
+                getConversationUmoInfo(selectedConversation).session_id ||
+                tm("status.unknown")
+              }}</span>
+            </div>
           </div>
         </v-card-title>
 
@@ -553,18 +596,26 @@
 </template>
 
 <script lang="ts">
-import axios, { AxiosError } from "@/utils/request";
+import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { debounce } from "lodash";
 import { defineComponent } from "vue";
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import MessageList from "@/components/chat/MessageList.vue";
+import UmoDisplay from "@/components/shared/UmoDisplay.vue";
+import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
-import { useI18n, useModuleI18n } from "@/i18n/composables";
-import MessageList from "@/components/chat/MessageList.vue";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
+import axios, { AxiosError } from "@/utils/request";
+
+interface UmoInfo {
+  umo?: string;
+  platform?: string;
+  message_type?: string;
+  session_id?: string;
+  auto_name?: string;
+  user_alias?: string;
+  display_name?: string;
+}
 
 interface ConversationItem {
   user_id: string;
@@ -572,6 +623,7 @@ interface ConversationItem {
   title: string;
   created_at?: number;
   updated_at?: number;
+  umo_info?: UmoInfo;
   sessionInfo?: { platform: string; messageType: string; sessionId: string };
 }
 
@@ -597,6 +649,7 @@ export default defineComponent({
   components: {
     VueMonacoEditor,
     MessageList,
+    UmoDisplay,
   },
 
   setup() {
@@ -738,7 +791,7 @@ export default defineComponent({
       // 解析 tutorial_map
       const tutorialMap = this.commonStore.tutorial_map;
       for (const platform in tutorialMap) {
-        if (tutorialMap.hasOwnProperty(platform)) {
+        if (Object.hasOwn(tutorialMap, platform)) {
           platforms.push({
             title: platform,
             value: platform,
@@ -758,9 +811,7 @@ export default defineComponent({
 
     // 当前的筛选条件对象
     currentFilters() {
-      const platforms = this.platformFilter.map((item) =>
-        typeof item === "object" ? item.value : item,
-      );
+      const platforms = this.platformFilter.map((item) => (typeof item === "object" ? item.value : item));
       return {
         platforms: platforms,
         messageTypes: this.messageTypeFilter,
@@ -784,60 +835,54 @@ export default defineComponent({
         }
       }
 
-      return this.conversationHistory
-        // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
-        .filter((msg) => msg.role === "user" || msg.role === "assistant")
-        .map((msg) => {
-          console.info("处理消息:", msg.role, msg.content);
+      return (
+        this.conversationHistory
+          // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
+          .filter((msg) => msg.role === "user" || msg.role === "assistant")
+          .map((msg) => {
+            console.info("处理消息:", msg.role, msg.content);
 
-          const messageParts = this.convertContentToMessageParts(msg.content)
-            // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
-            .filter(
-              (part) =>
-                part.type !== "plain" || (part.text && part.text.trim()),
-            );
+            const messageParts = this.convertContentToMessageParts(msg.content)
+              // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
+              .filter((part) => part.type !== "plain" || (part.text && part.text.trim()));
 
-          // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
-          if (
-            msg.role === "assistant" &&
-            Array.isArray((msg as Record<string, unknown>).tool_calls) &&
-            ((msg as Record<string, unknown>).tool_calls as unknown[]).length
-          ) {
-            const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map(
-              (tc: unknown) => {
+            // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
+            if (
+              msg.role === "assistant" &&
+              Array.isArray((msg as Record<string, unknown>).tool_calls) &&
+              ((msg as Record<string, unknown>).tool_calls as unknown[]).length
+            ) {
+              const toolCalls = ((msg as Record<string, unknown>).tool_calls as unknown[]).map((tc: unknown) => {
                 const tcObj = tc as Record<string, unknown>;
                 const fn = (tcObj.function || {}) as Record<string, unknown>;
                 return {
                   id: tcObj.id,
                   name: (fn.name || tcObj.name) as string,
                   args: (fn.arguments ?? tcObj.arguments) as string,
-                  result:
-                    toolResultsById[tcObj.id as string],
+                  result: toolResultsById[tcObj.id as string],
                   // 历史回放无真实耗时数据：
                   // ts: 0  → ToolCallCard.toolCallDuration 在 startTime<=0 时早退，跳过时长显示
                   // finished_ts: 1 → MessageList.toolCallStatusText 视为已完成（避免误显示"运行中"）
                   ts: 0,
                   finished_ts: 1,
                 };
+              });
+              messageParts.push({
+                type: "tool_call",
+                tool_calls: toolCalls,
+              } as unknown as MessageContentPart);
+            }
+
+            const finalParts = messageParts.length ? messageParts : [{ type: "plain", text: "" }];
+
+            return {
+              content: {
+                type: msg.role === "user" ? "user" : "bot",
+                message: finalParts,
               },
-            );
-            messageParts.push({
-              type: "tool_call",
-              tool_calls: toolCalls,
-            } as unknown as MessageContentPart);
-          }
-
-          const finalParts = messageParts.length
-            ? messageParts
-            : [{ type: "plain", text: "" }];
-
-          return {
-            content: {
-              type: msg.role === "user" ? "user" : "bot",
-              message: finalParts,
-            },
-          };
-        });
+            };
+          })
+      );
     },
   },
 
@@ -873,8 +918,7 @@ export default defineComponent({
 
     // 从会话ID解析平台和消息类型信息
     parseSessionId(userId: string | null | undefined) {
-      if (!userId)
-        return { platform: "default", messageType: "default", sessionId: "" };
+      if (!userId) return { platform: "default", messageType: "default", sessionId: "" };
 
       // 使用冒号进行分割，格式: platform:messageType:sessionId
       const parts = userId.split(":");
@@ -903,27 +947,57 @@ export default defineComponent({
     getMessageTypeDisplay(messageType: string) {
       const typeMap = {
         GroupMessage: this.tm("messageTypes.group"),
+        group: this.tm("messageTypes.group"),
         FriendMessage: this.tm("messageTypes.friend"),
+        friend: this.tm("messageTypes.friend"),
+        private: this.tm("messageTypes.friend"),
         default: this.tm("messageTypes.unknown"),
       };
 
       return typeMap[messageType] || typeMap.default;
     },
 
-    formatUmoSource(item: ConversationItem) {
-      if (!item?.sessionInfo) {
-        return item?.user_id || this.tm("status.unknown");
-      }
+    getConversationUmoInfo(item: ConversationItem | null | undefined) {
+      const umo = item?.user_id || item?.umo_info?.umo || "";
+      const parsed = this.parseSessionId(umo);
+      const info = item?.umo_info || {};
+      return {
+        umo,
+        platform: info.platform || parsed.platform,
+        message_type: info.message_type || parsed.messageType,
+        session_id: info.session_id || parsed.sessionId,
+        auto_name: info.auto_name || "",
+        user_alias: info.user_alias || "",
+        display_name: info.display_name || umo,
+      };
+    },
 
+    getConversationUmoDisplayProps(item: ConversationItem) {
+      const info = this.getConversationUmoInfo(item);
+      return {
+        umo: info.umo || this.tm("status.unknown"),
+        platform: info.platform,
+        messageType: info.message_type,
+        sessionId: info.session_id,
+        autoName: info.auto_name,
+        userAlias: info.user_alias,
+      };
+    },
+
+    hasConversationUmoReadableName(item: ConversationItem) {
+      const info = this.getConversationUmoInfo(item);
+      return Boolean(info.user_alias || info.auto_name);
+    },
+
+    formatUmoSource(item: ConversationItem) {
       if (this.umoDisplayMode === "raw") {
         return item.user_id || this.tm("status.unknown");
       }
 
-      const platform = item.sessionInfo.platform || this.tm("status.unknown");
-      const messageType = this.getMessageTypeDisplay(
-        item.sessionInfo.messageType,
-      );
-      const sessionId = item.sessionInfo.sessionId || this.tm("status.unknown");
+      const info = this.getConversationUmoInfo(item);
+      const platform = info.platform || this.tm("status.unknown");
+      const messageType = this.getMessageTypeDisplay(info.message_type);
+      const sessionId = info.session_id || this.tm("status.unknown");
       return `${platform}:${messageType}:${sessionId}`;
     },
 
@@ -955,9 +1029,7 @@ export default defineComponent({
 
           // 添加筛选条件 - 处理combobox的混合数据格式
           if (this.platformFilter.length > 0) {
-            const platforms = this.platformFilter.map((item) =>
-              typeof item === "object" ? item.value : item,
-            );
+            const platforms = this.platformFilter.map((item) => (typeof item === "object" ? item.value : item));
             params.platforms = platforms.join(",");
           }
 
@@ -992,7 +1064,12 @@ export default defineComponent({
             // 处理会话数据，解析sessionId
             this.conversations = (data.conversations || []).map((conv) => {
               // 为每个会话添加会话信息
-              conv.sessionInfo = this.parseSessionId(conv.user_id);
+              const umoInfo = this.getConversationUmoInfo(conv);
+              conv.sessionInfo = {
+                platform: umoInfo.platform,
+                messageType: umoInfo.message_type,
+                sessionId: umoInfo.session_id,
+              };
               return conv;
             });
 
@@ -1008,17 +1085,13 @@ export default defineComponent({
               console.warn("API 响应中没有分页信息");
             }
           } else {
-            this.showErrorMessage(
-              response.data.message || this.tm("messages.fetchError"),
-            );
+            this.showErrorMessage(response.data.message || this.tm("messages.fetchError"));
           }
         } catch (error: unknown) {
           if (axios.isCancel(error)) return;
 
           console.error("获取对话列表出错:", error);
-          this.showErrorMessage(
-            this.getErrorMessage(error, this.tm("messages.fetchError")),
-          );
+          this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
         } finally {
           this.loading = false;
         }
@@ -1032,9 +1105,7 @@ export default defineComponent({
       this.isEditingHistory = false;
 
       try {
-        console.info(
-          `正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`,
-        );
+        console.info(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
         const response = await axios.post("/api/conversation/detail", {
           user_id: item.user_id,
           cid: item.cid,
@@ -1042,13 +1113,22 @@ export default defineComponent({
 
         if (response.data.status === "ok") {
           try {
-            const historyData = response.data.data.history || "[]";
+            const detailData = response.data.data || {};
+            const mergedConversation = {
+              ...this.selectedConversation,
+              ...detailData,
+            };
+            const umoInfo = this.getConversationUmoInfo(mergedConversation);
+            mergedConversation.sessionInfo = {
+              platform: umoInfo.platform,
+              messageType: umoInfo.message_type,
+              sessionId: umoInfo.session_id,
+            };
+            this.selectedConversation = mergedConversation;
+
+            const historyData = detailData.history || "[]";
             this.conversationHistory = JSON.parse(historyData);
-            this.editedHistory = JSON.stringify(
-              this.conversationHistory,
-              null,
-              2,
-            );
+            this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
           } catch (e) {
             this.conversationHistory = [];
             this.editedHistory = "[]";
@@ -1056,15 +1136,11 @@ export default defineComponent({
           }
           this.dialogView = true;
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.historyError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.historyError"));
         }
       } catch (error: unknown) {
         console.error("获取对话详情出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.historyError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.historyError")));
       } finally {
         this.loading = false;
       }
@@ -1097,15 +1173,11 @@ export default defineComponent({
           this.showSuccessMessage(this.tm("messages.historySaveSuccess"));
           this.isEditingHistory = false;
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.historySaveError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.historySaveError"));
         }
       } catch (error: unknown) {
         console.error("更新对话历史出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.historySaveError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.historySaveError")));
       } finally {
         this.savingHistory = false;
       }
@@ -1114,12 +1186,7 @@ export default defineComponent({
     // 关闭对话历史对话框
     async closeHistoryDialog() {
       if (this.isEditingHistory) {
-        if (
-          await askForConfirmationDialog(
-            this.tm("dialogs.view.confirmClose"),
-            this.confirmDialog,
-          )
-        ) {
+        if (await askForConfirmationDialog(this.tm("dialogs.view.confirmClose"), this.confirmDialog)) {
           this.dialogView = false;
         }
       } else {
@@ -1149,9 +1216,7 @@ export default defineComponent({
         if (response.data.status === "ok") {
           // 更新本地数据
           const index = this.conversations.findIndex(
-            (item) =>
-              item.user_id === this.editedItem.user_id &&
-              item.cid === this.editedItem.cid,
+            (item) => item.user_id === this.editedItem.user_id && item.cid === this.editedItem.cid,
           );
 
           if (index !== -1) {
@@ -1164,14 +1229,10 @@ export default defineComponent({
           // 刷新数据
           this.fetchConversations();
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.saveError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.saveError"));
         }
       } catch (error: unknown) {
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.saveError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.saveError")));
       } finally {
         this.loading = false;
       }
@@ -1196,9 +1257,7 @@ export default defineComponent({
 
         if (response.data.status === "ok") {
           const index = this.conversations.findIndex(
-            (item) =>
-              item.user_id === target.user_id &&
-              item.cid === target.cid,
+            (item) => item.user_id === target.user_id && item.cid === target.cid,
           );
 
           if (index !== -1) {
@@ -1208,22 +1267,14 @@ export default defineComponent({
           this.dialogDelete = false;
           this.showSuccessMessage(this.tm("messages.deleteSuccess"));
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.deleteError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.deleteError"));
         }
       } catch (error: unknown) {
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.deleteError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.deleteError")));
       } finally {
         this.loading = false;
         this.selectedItems = this.selectedItems.filter(
-          (item) =>
-            !(
-              item.user_id === target.user_id &&
-              item.cid === target.cid
-            ),
+          (item) => !(item.user_id === target.user_id && item.cid === target.cid),
         );
         this.selectedConversation = null;
       }
@@ -1247,8 +1298,7 @@ export default defineComponent({
     // 从选择中移除项目
     removeFromSelection(item: ConversationItem) {
       const index = this.selectedItems.findIndex(
-        (selected) =>
-          selected.user_id === item.user_id && selected.cid === item.cid,
+        (selected) => selected.user_id === item.user_id && selected.cid === item.cid,
       );
       if (index !== -1) {
         this.selectedItems.splice(index, 1);
@@ -1298,15 +1348,11 @@ export default defineComponent({
           // 刷新列表
           this.fetchConversations();
         } else {
-          this.showErrorMessage(
-            response.data.message || this.tm("messages.batchDeleteError"),
-          );
+          this.showErrorMessage(response.data.message || this.tm("messages.batchDeleteError"));
         }
       } catch (error: unknown) {
         console.error("批量删除对话出错:", error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.batchDeleteError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.batchDeleteError")));
       } finally {
         this.loading = false;
       }
@@ -1343,10 +1389,7 @@ export default defineComponent({
         link.href = url;
 
         // 生成文件名（使用时间戳）
-        const timestamp = new Date()
-          .toISOString()
-          .replace(/[:.]/g, "-")
-          .slice(0, -5);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
         const filename = `conversations_export_${timestamp}.jsonl`;
 
         link.setAttribute("download", filename);
@@ -1360,9 +1403,7 @@ export default defineComponent({
         this.showSuccessMessage(this.tm("messages.exportSuccess"));
       } catch (error: unknown) {
         console.error(this.tm("messages.exportError"), error);
-        this.showErrorMessage(
-          this.getErrorMessage(error, this.tm("messages.exportError")),
-        );
+        this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.exportError")));
       } finally {
         this.loading = false;
       }
@@ -1613,6 +1654,39 @@ export default defineComponent({
   gap: 4px;
   min-width: 0;
   overflow: hidden;
+}
+
+.conversation-umo-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.conversation-umo-parsed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.conversation-umo-display {
+  max-width: 100%;
+}
+
+.conversation-detail-title {
+  align-items: flex-start;
+}
+
+.conversation-detail-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-detail-umo-parsed {
+  max-width: 100%;
 }
 
 .umo-separator {

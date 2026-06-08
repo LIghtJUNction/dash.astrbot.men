@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useI18n } from "@/i18n/composables";
-import { useCustomizerStore } from "@/stores/customizer";
 import { computed, useAttrs } from "vue";
 import { useRoute } from "vue-router";
+import { useI18n } from "@/i18n/composables";
+import { useCustomizerStore } from "@/stores/customizer";
 
 defineOptions({
   inheritAttrs: false,
@@ -21,14 +21,18 @@ const itemStyle = computed(() => {
 });
 
 const isItemActive = computed(() => {
-  if (!props.item || props.item.type === "external" || !props.item.to)
-    return false;
+  if (!props.item || props.item.type === "external" || !props.item.to) return false;
   if (typeof props.item.to !== "string") return false;
   if (props.item.to.includes("#")) {
     const [path, hash] = props.item.to.split("#");
     return route.path === path && route.hash === `#${hash}`;
   }
   return route.path === props.item.to;
+});
+
+const itemTitle = computed(() => {
+  if (!props.item?.title) return "";
+  return props.item.isRawTitle ? props.item.title : t(props.item.title);
 });
 </script>
 
@@ -56,7 +60,7 @@ const isItemActive = computed(() => {
             word-break: break-word;
           "
         >
-          {{ t(item.title) }}
+          {{ itemTitle }}
         </v-list-item-title>
       </v-list-item>
     </template>
@@ -92,7 +96,7 @@ const isItemActive = computed(() => {
       />
     </template>
     <v-list-item-title style="font-size: 14px">
-      {{ t(item.title) }}
+      {{ itemTitle }}
     </v-list-item-title>
     <v-list-item-subtitle
       v-if="item.subCaption"
