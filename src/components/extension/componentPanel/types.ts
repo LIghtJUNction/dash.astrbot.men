@@ -20,6 +20,7 @@ export interface CommandItem {
   aliases: string[];
   permission: PermissionType;
   enabled: boolean;
+  plugin_activated: boolean;
   is_group: boolean;
   has_conflict: boolean;
   reserved: boolean;
@@ -67,6 +68,13 @@ export interface DetailsDialogState {
   command: CommandItem | null;
 }
 
+/** Tool activation counts. */
+export interface ToolSummary {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
 /** Toast 消息状态 */
 export interface SnackbarState {
   show: boolean;
@@ -100,6 +108,8 @@ export interface ToolItem {
   name: string;
   description: string;
   active: boolean;
+  permission?: "admin" | "member";
+  permission_configured?: boolean;
   readonly?: boolean;
   parameters?: {
     properties?: Record<string, ToolParameter>;
