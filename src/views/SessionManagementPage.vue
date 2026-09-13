@@ -1151,6 +1151,13 @@ interface ApiResponse<T> {
 
 const FOLLOW_CONFIG_VALUE = "__astrbot_follow_config__";
 
+function providerOptions(providers: ProviderOption[], followConfigLabel: string) {
+  return [
+    { label: followConfigLabel, value: FOLLOW_CONFIG_VALUE },
+    ...providers.map((provider) => ({ label: `${provider.name} (${provider.model})`, value: provider.id })),
+  ];
+}
+
 export default defineComponent({
   name: "SessionManagementPage",
   components: {
@@ -1313,53 +1320,23 @@ export default defineComponent({
     },
 
     chatProviderOptions() {
-      return [
-        { label: this.tm("provider.followConfig"), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map((p: ProviderOption) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
+      return providerOptions(this.availableChatProviders, this.tm("provider.followConfig"));
     },
 
     sttProviderOptions() {
-      return [
-        { label: this.tm("provider.followConfig"), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableSttProviders.map((p: ProviderOption) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
+      return providerOptions(this.availableSttProviders, this.tm("provider.followConfig"));
     },
 
     ttsProviderOptions() {
-      return [
-        { label: this.tm("provider.followConfig"), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p: ProviderOption) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
+      return providerOptions(this.availableTtsProviders, this.tm("provider.followConfig"));
     },
 
     batchChatProviderOptions() {
-      return [
-        { label: this.tm("provider.followConfig"), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableChatProviders.map((p: ProviderOption) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
+      return providerOptions(this.availableChatProviders, this.tm("provider.followConfig"));
     },
 
     batchTtsProviderOptions() {
-      return [
-        { label: this.tm("provider.followConfig"), value: FOLLOW_CONFIG_VALUE },
-        ...this.availableTtsProviders.map((p: ProviderOption) => ({
-          label: `${p.name} (${p.model})`,
-          value: p.id,
-        })),
-      ];
+      return providerOptions(this.availableTtsProviders, this.tm("provider.followConfig"));
     },
 
     pluginOptions() {
