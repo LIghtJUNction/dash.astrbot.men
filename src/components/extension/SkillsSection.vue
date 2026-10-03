@@ -73,6 +73,20 @@
             <h3 class="skills-list-title text-h3">
               {{ tm("status.installed") }}
             </h3>
+            <div class="skills-search-wrap">
+              <v-text-field
+                v-model="skillSearch"
+                :label="tm('skills.searchPlaceholder')"
+                prepend-inner-icon="mdi-magnify"
+                density="compact"
+                variant="solo-filled"
+                flat
+                clearable
+                hide-details
+                single-line
+                class="skills-search-field"
+              />
+            </div>
             <div class="skills-list-actions">
               <template v-if="batchSelectionEnabled">
                 <v-btn
@@ -123,9 +137,14 @@
             </div>
           </div>
 
-          <div class="skills-list">
+          <div v-if="filteredSkills.length === 0" class="text-center pa-8">
+            <v-icon size="64" color="grey-lighten-1">mdi-magnify</v-icon>
+            <p class="text-grey mt-4">{{ tm("skills.noSearchResult") }}</p>
+          </div>
+
+          <div v-else class="skills-list">
             <OutlinedActionListItem
-              v-for="skill in skills"
+              v-for="skill in filteredSkills"
               :key="skill.name"
               :title="skill.name"
               class="skill-list-item"
@@ -239,8 +258,8 @@
                         isInactivePluginSkill(skill)
                           ? tm('skills.pluginDisabled')
                           : skill.active
-                          ? tm('skills.disable')
-                          : tm('skills.enable')
+                            ? tm('skills.disable')
+                            : tm('skills.enable')
                       "
                       :loading="itemLoading[skill.name] || false"
                       :disabled="
@@ -256,8 +275,8 @@
                     isInactivePluginSkill(skill)
                       ? tm("skills.pluginDisabled")
                       : skill.active
-                      ? tm("skills.disable")
-                      : tm("skills.enable")
+                        ? tm("skills.disable")
+                        : tm("skills.enable")
                   }}</span>
                 </v-tooltip>
               </template>
@@ -714,10 +733,15 @@
         }}</v-card-title>
         <v-card-text>{{ tm("skills.deleteMessage") }}</v-card-text>
         <v-card-actions class="d-flex justify-end">
-        <v-btn variant="text" @click="deleteDialog = false">
-          {{ tm("skills.cancel") }}
-        </v-btn>
-        <v-btn color="error" variant="tonal" :loading="deleting" @click="deleteSkill">
+          <v-btn variant="text" @click="deleteDialog = false">
+            {{ tm("skills.cancel") }}
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="tonal"
+            :loading="deleting"
+            @click="deleteSkill"
+          >
             {{ t("core.common.itemCard.delete") }}
           </v-btn>
         </v-card-actions>
@@ -946,8 +970,8 @@
 
 <script lang="ts">
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import type { editor } from "monaco-editor";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import OutlinedActionListItem from "@/components/shared/OutlinedActionListItem.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -1030,6 +1054,8 @@ interface SkillsListPayload {
   skills?: Skill[];
 }
 
+import { buildSearchQuery, matchesText } from "@/utils/pluginSearch";
+
 const STATUS_WAITING = "waiting";
 const STATUS_UPLOADING = "uploading";
 const STATUS_SUCCESS = "success";
@@ -1049,9 +1075,14 @@ export default {
 
     const mode = ref("local");
     const skills = ref<Skill[]>([]);
+    const skillSearch = ref("");
     const loading = ref(false);
     const runtime = ref("local");
-    const sandboxCache = reactive<SandboxCache>({ ready: false, count: 0, updated_at: null });
+    const sandboxCache = reactive<SandboxCache>({
+      ready: false,
+      count: 0,
+      updated_at: null,
+    });
     const uploading = ref(false);
     const uploadDialog = ref(false);
     const uploadInput = ref<HTMLInputElement | null>(null);
@@ -1071,7 +1102,11 @@ export default {
     const neoLoading = ref(false);
     const neoCandidates = ref<NeoCandidate[]>([]);
     const neoReleases = ref<NeoRelease[]>([]);
-    const neoFilters = reactive<{ skill_key: string; status: string; stage: string }>({
+    const neoFilters = reactive<{
+      skill_key: string;
+      status: string;
+      stage: string;
+    }>({
       skill_key: "",
       status: "",
       stage: "",
@@ -1216,17 +1251,28 @@ export default {
 
     const isSandboxPresetSkill = (skill: Skill): boolean => skill.source_type === "sandbox_only";
     const isPluginProvidedSkill = (skill: Skill): boolean => skill.source_type === "plugin";
-    const isInactivePluginSkill = (skill: Skill): boolean => isPluginProvidedSkill(skill) && skill.plugin_active === false;
-    const isReadOnlySourceSkill = (skill: Skill): boolean => isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
-    const deletableSkills = computed(() =>
-      skills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
+    const isInactivePluginSkill = (skill: Skill): boolean =>
+      isPluginProvidedSkill(skill) && skill.plugin_active === false;
+    const isReadOnlySourceSkill = (skill: Skill): boolean =>
+      isSandboxPresetSkill(skill) || isPluginProvidedSkill(skill);
+    const deletableSkills = computed(() => skills.value.filter((skill) => !isReadOnlySourceSkill(skill)));
+
+    const filteredSkills = computed(() => {
+      const query = buildSearchQuery(skillSearch.value);
+      if (!query) return skills.value;
+      return skills.value.filter((skill) =>
+        [skill.name, skill.description, skill.path].some((field) => matchesText(field, query)),
+      );
+    });
+
+    // Select-all only applies to the currently visible (filtered) deletable skills.
+    const visibleDeletableSkills = computed(() =>
+      filteredSkills.value.filter((skill) => !isReadOnlySourceSkill(skill)),
     );
     const allDeletableSelected = computed(
       () =>
-        deletableSkills.value.length > 0 &&
-        deletableSkills.value.every((skill) =>
-          selectedSkillNames.value.includes(skill.name),
-        ),
+        visibleDeletableSkills.value.length > 0 &&
+        visibleDeletableSkills.value.every((skill) => selectedSkillNames.value.includes(skill.name)),
     );
 
     const normalizeNeoItemsPayload = <T>(res: { data?: { data?: T[] | { items?: T[] } } }): T[] => {
@@ -1410,13 +1456,9 @@ export default {
         const res = await axios.get("/api/skills");
         skills.value = normalizeSkillsPayload(res);
         const deletableNames = new Set(
-          skills.value
-            .filter((skill) => !isReadOnlySourceSkill(skill))
-            .map((skill) => skill.name),
+          skills.value.filter((skill) => !isReadOnlySourceSkill(skill)).map((skill) => skill.name),
         );
-        selectedSkillNames.value = selectedSkillNames.value.filter((name) =>
-          deletableNames.has(name),
-        );
+        selectedSkillNames.value = selectedSkillNames.value.filter((name) => deletableNames.has(name));
         if (batchSelectionEnabled.value && deletableNames.size === 0) {
           batchSelectionEnabled.value = false;
         }
@@ -1507,18 +1549,14 @@ export default {
         selectedSkillNames.value = [];
         return;
       }
-      selectedSkillNames.value = deletableSkills.value.map(
-        (skill) => skill.name,
-      );
+      selectedSkillNames.value = visibleDeletableSkills.value.map((skill) => skill.name);
     };
 
     const confirmBatchDelete = () => {
       const selectedNames = new Set(selectedSkillNames.value);
       batchDeleteTargets.value = [
         ...new Set(
-          deletableSkills.value
-            .filter((skill) => selectedNames.has(skill.name))
-            .map((skill) => skill.name),
+          visibleDeletableSkills.value.filter((skill) => selectedNames.has(skill.name)).map((skill) => skill.name),
         ),
       ];
       if (batchDeleteTargets.value.length === 0) return;
@@ -1550,13 +1588,9 @@ export default {
         const refreshed = await fetchSkills();
         if (refreshed) {
           const currentDeletableNames = new Set(
-            skills.value
-              .filter((skill) => !isReadOnlySourceSkill(skill))
-              .map((skill) => skill.name),
+            skills.value.filter((skill) => !isReadOnlySourceSkill(skill)).map((skill) => skill.name),
           );
-          selectedSkillNames.value = failed.filter((name) =>
-            currentDeletableNames.has(name),
-          );
+          selectedSkillNames.value = failed.filter((name) => currentDeletableNames.has(name));
         } else {
           selectedSkillNames.value = failed;
           batchSelectionEnabled.value = failed.length > 0;
@@ -1568,10 +1602,7 @@ export default {
 
         if (failed.length === 0) {
           batchSelectionEnabled.value = false;
-          showMessage(
-            tm("skills.batchDeleteSuccess", { count: succeeded }),
-            "success",
-          );
+          showMessage(tm("skills.batchDeleteSuccess", { count: succeeded }), "success");
         } else {
           showMessage(
             tm("skills.batchDeletePartial", {
@@ -1846,7 +1877,7 @@ export default {
         const res = await axios.get("/api/config/get");
         const config = res?.data?.data?.config || {};
         const providerSettings = config?.provider_settings || {};
-        const currentRuntime = providerSettings?.computer_use_runtime || "local";
+        const currentRuntime = providerSettings?.computer_use_runtime || "none";
         const booter = providerSettings?.sandbox?.booter || "";
         neoEnabled.value = currentRuntime === "sandbox" && booter === "shipyard_neo";
       } catch (_err: unknown) {
@@ -2039,6 +2070,14 @@ export default {
       }
     });
 
+    // Keep the batch selection in sync with the active filter so skills hidden
+    // by the search can never be included in a batch delete.
+    watch(visibleDeletableSkills, (visibleSkills) => {
+      if (!batchSelectionEnabled.value) return;
+      const visibleNames = new Set(visibleSkills.map((skill) => skill.name));
+      selectedSkillNames.value = selectedSkillNames.value.filter((name) => visibleNames.has(name));
+    });
+
     watch(uploadDialog, (isOpen: boolean) => {
       if (!isOpen && !uploading.value) {
         resetUploadState();
@@ -2057,6 +2096,7 @@ export default {
       tm,
       mode,
       skills,
+      skillSearch,
       loading,
       runtime,
       sandboxCache,
@@ -2086,6 +2126,7 @@ export default {
       releaseStageItems,
       activeReleaseCount,
       deletableSkills,
+      filteredSkills,
       allDeletableSelected,
       candidateHeaders,
       releaseHeaders,
@@ -2152,12 +2193,11 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  justify-content: space-between;
   margin-bottom: 16px;
 }
 
 .skills-list-title {
-  margin: 0;
+  margin: 0 auto 0 0;
 }
 
 .skills-list-actions {
@@ -2165,7 +2205,15 @@ export default {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
+}
+
+.skills-search-wrap {
+  flex: 0 1 300px;
+  min-width: 200px;
+}
+
+.skills-search-field {
+  width: 100%;
 }
 
 .skill-list-item :deep(.outlined-action-list-item__main) {
@@ -2774,6 +2822,10 @@ export default {
 @media (max-width: 640px) {
   .skills-list-header {
     align-items: stretch;
+  }
+
+  .skills-search-wrap {
+    flex: 1 1 100%;
   }
 
   .skills-list-actions {

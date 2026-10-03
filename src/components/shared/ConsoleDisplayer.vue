@@ -42,7 +42,11 @@
 </template>
 
 <script lang="ts">
-import { EventSourcePolyfill, type MessageEvent as SseMessageEvent, type Event as SseEvent } from "event-source-polyfill";
+import {
+  EventSourcePolyfill,
+  type Event as SseEvent,
+  type MessageEvent as SseMessageEvent,
+} from "event-source-polyfill";
 import { useCommonStore } from "@/stores/common";
 import axios, { resolveApiUrl } from "@/utils/request";
 
@@ -223,6 +227,10 @@ export default {
       if (!newLogs || newLogs.length === 0) return;
 
       let hasUpdate = false;
+      const termElement = document.getElementById("term");
+      // Batch the rendered log elements into a single fragment so that a large
+      // history payload only triggers one reflow instead of one per log line.
+      const fragment = termElement ? document.createDocumentFragment() : null;
 
       newLogs.forEach((log) => {
         const exists = this.localLogCache.some(
@@ -234,7 +242,9 @@ export default {
           hasUpdate = true;
 
           if (this.isLevelSelected(log.level) && !this.isHiddenByCategory(log)) {
-            this.printLog(log.data);
+            if (fragment) {
+              fragment.appendChild(this.buildLogElement(log.data));
+            }
           }
         }
       });
@@ -245,6 +255,13 @@ export default {
         const maxSize = this.commonStore.log_cache_max_len || 200;
         if (this.localLogCache.length > maxSize) {
           this.localLogCache.splice(0, this.localLogCache.length - maxSize);
+        }
+      }
+
+      if (termElement && fragment && fragment.childNodes.length > 0) {
+        termElement.appendChild(fragment);
+        if (this.autoScroll) {
+          termElement.scrollTop = termElement.scrollHeight;
         }
       }
     },
@@ -280,16 +297,20 @@ export default {
 
     refreshDisplay() {
       const termElement = document.getElementById("term");
-      if (termElement) {
-        termElement.innerHTML = "";
+      if (!termElement) return;
 
-        if (this.localLogCache && this.localLogCache.length > 0) {
-          this.localLogCache.forEach((logItem) => {
-            if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
-              this.printLog(logItem.data);
-            }
-          });
+      termElement.innerHTML = "";
+      if (!this.localLogCache || this.localLogCache.length === 0) return;
+
+      const fragment = document.createDocumentFragment();
+      this.localLogCache.forEach((logItem) => {
+        if (this.isLevelSelected(logItem.level) && !this.isHiddenByCategory(logItem)) {
+          fragment.appendChild(this.buildLogElement(logItem.data));
         }
+      });
+      termElement.appendChild(fragment);
+      if (this.autoScroll) {
+        termElement.scrollTop = termElement.scrollHeight;
       }
     },
 
@@ -311,7 +332,7 @@ export default {
     appendLogContent(element: HTMLElement, log: string) {
       const levelMatch = log.match(/\[(DEBG|INFO|WARN|ERRO|CRIT|DEBUG|WARNING|ERROR|CRITICAL)\]/);
       if (!levelMatch) {
-        element.innerText = `${log}`;
+        element.textContent = `${log}`;
         return;
       }
 
@@ -322,15 +343,15 @@ export default {
 
       const prefixSpan = document.createElement("span");
       prefixSpan.className = "console-log-prefix";
-      prefixSpan.innerText = prefix;
+      prefixSpan.textContent = prefix;
 
       const levelSpan = document.createElement("span");
       levelSpan.className = "console-log-level";
-      levelSpan.innerText = levelMatch[0];
+      levelSpan.textContent = levelMatch[0];
 
       const messageSpan = document.createElement("span");
       messageSpan.className = "console-log-message";
-      messageSpan.innerText = message;
+      messageSpan.textContent = message;
 
       element.classList.add("console-log-line--structured");
       element.appendChild(prefixSpan);
@@ -338,14 +359,9 @@ export default {
       element.appendChild(messageSpan);
     },
 
-    printLog(log: string) {
-      const ele = document.getElementById("term");
-      if (!ele) {
-        return;
-      }
-
+    buildLogElement(log: string): HTMLPreElement {
       const span = document.createElement("pre");
-      let style = this.logColorAnsiMap.default;
+      let style = this.logColorAnsiMap["default"];
       for (const key in this.logColorAnsiMap) {
         if (log.startsWith(key)) {
           style = this.logColorAnsiMap[key];
@@ -357,10 +373,7 @@ export default {
       span.style.cssText = style;
       span.classList.add("console-log-line", "fade-in");
       this.appendLogContent(span, log);
-      ele.appendChild(span);
-      if (this.autoScroll) {
-        ele.scrollTop = ele.scrollHeight;
-      }
+      return span;
     },
   },
 };
@@ -382,8 +395,14 @@ export default {
 }
 
 #console-wrapper:fullscreen {
+  --v-theme-on-surface: 255, 255, 255;
   background-color: #1e1e1e;
+  color: #fff;
   padding: 20px;
+}
+
+#console-wrapper:fullscreen :deep(.v-switch__track) {
+  --v-theme-surface-variant: 163, 163, 163;
 }
 
 .filter-controls {

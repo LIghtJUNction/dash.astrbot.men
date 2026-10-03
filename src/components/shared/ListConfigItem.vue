@@ -28,7 +28,13 @@
           label
           color="primary"
         >
-          {{ secret && !secretVisible ? '••••••••' : (item.length > 20 ? item.slice(0, 20) + '...' : item) }}
+          {{
+            secret && !secretVisible
+              ? "••••••••"
+              : item.length > 20
+                ? item.slice(0, 20) + "..."
+                : item
+          }}
         </v-chip>
         <v-chip
           v-if="modelValue.length > maxDisplayItems"
@@ -105,7 +111,7 @@
             @click="startEdit(index, item)"
           >
             <v-list-item-title v-if="editIndex !== index" class="item-text">
-              {{ secret && !secretVisible ? '••••••••' : item }}
+              {{ secret && !secretVisible ? "••••••••" : item }}
             </v-list-item-title>
             <v-text-field
               v-else
@@ -214,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type PropType } from "vue";
+import { computed, nextTick, type PropType, ref, watch } from "vue";
 import { useI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
 
@@ -243,19 +249,19 @@ const props = defineProps({
   },
   preferSingleItem: {
     type: Boolean,
-    default: true
+    default: true,
   },
   secret: {
     type: Boolean,
-    default: false
-  }
-})
+    default: false,
+  },
+});
 
 const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 
 const secretVisible = ref(false);
-const secretInputType = computed(() => props.secret && !secretVisible.value ? "password" : "text");
-const secretToggleIcon = computed(() => props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined);
+const secretInputType = computed(() => (props.secret && !secretVisible.value ? "password" : "text"));
+const secretToggleIcon = computed(() => (props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined));
 const dialog = ref(false);
 const localItems = ref<string[]>([]);
 const originalItems = ref<string[]>([]);

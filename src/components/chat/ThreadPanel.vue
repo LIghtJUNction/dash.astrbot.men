@@ -1,6 +1,6 @@
 <template>
-  <transition name="slide-left">
-    <aside v-if="modelValue && thread" class="thread-panel">
+  <transition name="chat-panel">
+    <aside v-if="modelValue && thread" class="thread-panel chat-side-panel">
       <div class="thread-panel-header">
         <div class="thread-panel-title">{{ tm("thread.title") }}</div>
         <div class="thread-panel-actions">
@@ -55,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/components/chat/chatPanelTransition.css";
 import { nextTick, ref, watch } from "vue";
 import { fetchWithAuth } from "@/api/http";
 import { chatApi } from "@/api/v1";
@@ -82,6 +83,7 @@ const props = defineProps<{
   thread: ChatThread | null;
   isDark: boolean;
   deleting?: boolean;
+  getProviderSelection: () => { providerId: string; modelName: string };
 }>();
 
 const emit = defineEmits<{
@@ -154,6 +156,7 @@ async function send() {
   const abort = new AbortController();
   sending.value = true;
   try {
+    const selection = props.getProviderSelection();
     const response = await fetchWithAuth(chatApi.sendThreadMessageUrl(props.thread.thread_id), {
       method: "POST",
       headers: {
@@ -162,6 +165,8 @@ async function send() {
       body: JSON.stringify({
         message: [{ type: "plain", text }],
         flags: buildChatRequestFlags(),
+        selected_provider: selection.providerId,
+        selected_model: selection.modelName,
       }),
       signal: abort.signal,
     });
@@ -328,26 +333,17 @@ function scrollToBottom() {
 
 <style scoped>
 .thread-panel {
-  width: 380px;
+  --chat-side-panel-width: 380px;
+  width: var(--chat-side-panel-width);
   height: calc(100% - var(--chat-panel-top-offset, 0px));
   margin-top: var(--chat-panel-top-offset, 0px);
-  border-left: 1px solid var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
+  border-left: 1px solid
+    var(--chat-border, rgba(var(--v-theme-on-surface), 0.1));
   background: var(--chat-page-bg, rgb(var(--v-theme-surface)));
   color: rgb(var(--v-theme-on-surface));
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-}
-
-.slide-left-enter-active,
-.slide-left-leave-active {
-  transition: all 0.2s ease;
-}
-
-.slide-left-enter-from,
-.slide-left-leave-to {
-  transform: translateX(100%);
-  opacity: 0;
 }
 
 .thread-panel-header {
@@ -450,7 +446,8 @@ function scrollToBottom() {
   .thread-panel-header {
     min-height: 52px;
     padding: calc(10px + env(safe-area-inset-top)) 12px 8px;
-    border-bottom: 1px solid var(--chat-border, rgba(var(--v-border-color), 0.12));
+    border-bottom: 1px solid
+      var(--chat-border, rgba(var(--v-border-color), 0.12));
   }
 
   .thread-selected-text {
@@ -481,5 +478,4 @@ function scrollToBottom() {
     flex-shrink: 0;
   }
 }
-
 </style>

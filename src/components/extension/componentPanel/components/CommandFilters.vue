@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { normalizeTextInput } from "@/utils/inputValue";
+import { commandPermissionOptions, commandPermissions } from "../permissions";
 
 const { tm } = useModuleI18n("features/command");
 
@@ -41,11 +42,13 @@ const typeItems = [
   { title: tm("type.subCommand"), value: "sub_command" },
 ];
 
-const permissionItems = [
+const permissionItems = computed(() => [
   { title: tm("filters.all"), value: "all" },
-  { title: tm("permission.everyone"), value: "everyone" },
-  { title: tm("permission.admin"), value: "admin" },
-];
+  ...commandPermissionOptions.map((permission) => ({
+    title: tm(commandPermissions[permission].label),
+    value: permission === "member" ? "everyone" : permission,
+  })),
+]);
 
 const statusItems = [
   { title: tm("filters.all"), value: "all" },

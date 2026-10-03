@@ -24,7 +24,10 @@
         />
       </div>
 
-      <div v-if="filteredPluginList.length > 0" class="inline-plugin-selector__list">
+      <div
+        v-if="filteredPluginList.length > 0"
+        class="inline-plugin-selector__list"
+      >
         <div
           v-for="plugin in filteredPluginList"
           :key="plugin.name"
@@ -33,13 +36,21 @@
         >
           <div class="inline-plugin-card__body">
             <div class="inline-plugin-card__title-row">
-              <span class="inline-plugin-card__title">{{ pluginDisplayName(plugin) }}</span>
+              <span class="inline-plugin-card__title">{{
+                pluginDisplayName(plugin)
+              }}</span>
               <span v-if="plugin.reserved" class="inline-plugin-card__preset">
-                {{ tm('pluginSetSelector.preset') }}
+                {{ tm("pluginSetSelector.preset") }}
               </span>
             </div>
-            <div class="inline-plugin-card__description" :title="pluginDescription(plugin)">
-              {{ pluginDescription(plugin) || tm('pluginSetSelector.noDescription') }}
+            <div
+              class="inline-plugin-card__description"
+              :title="pluginDescription(plugin)"
+            >
+              {{
+                pluginDescription(plugin) ||
+                tm("pluginSetSelector.noDescription")
+              }}
             </div>
           </div>
 
@@ -54,15 +65,18 @@
         </div>
       </div>
 
-      <div v-else class="inline-plugin-selector__empty inline-plugin-selector__empty--search">
+      <div
+        v-else
+        class="inline-plugin-selector__empty inline-plugin-selector__empty--search"
+      >
         <v-icon size="38">mdi-magnify-close</v-icon>
-        <span>{{ tm('pluginSetSelector.noSearchResults') }}</span>
+        <span>{{ tm("pluginSetSelector.noSearchResults") }}</span>
       </div>
     </template>
 
     <div v-else class="inline-plugin-selector__empty">
       <v-icon size="38">mdi-puzzle-outline</v-icon>
-      <span>{{ tm('pluginSetSelector.noPlugins') }}</span>
+      <span>{{ tm("pluginSetSelector.noPlugins") }}</span>
     </div>
   </div>
 
@@ -144,10 +158,20 @@
                     hide-details
                   />
                 </template>
-                <v-list-item-title>{{ pluginDisplayName(plugin) }}</v-list-item-title>
+                <v-list-item-title>{{
+                  pluginDisplayName(plugin)
+                }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{ pluginDescription(plugin) || tm("pluginSetSelector.noDescription") }}
-                  <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
+                  {{
+                    pluginDescription(plugin) ||
+                    tm("pluginSetSelector.noDescription")
+                  }}
+                  <v-chip
+                    v-if="!plugin.activated"
+                    size="x-small"
+                    color="grey"
+                    class="ml-1"
+                  >
                     {{ tm("pluginSetSelector.notActivated") }}
                   </v-chip>
                 </v-list-item-subtitle>
@@ -184,7 +208,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type PropType } from "vue";
+import { computed, onMounted, type PropType, ref, watch } from "vue";
 import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
@@ -200,17 +224,17 @@ const props = defineProps({
   },
   maxDisplayItems: {
     type: Number,
-    default: 3
+    default: 3,
   },
   inline: {
     type: Boolean,
-    default: false
+    default: false,
   },
   searchKeyword: {
     type: String,
-    default: ''
-  }
-})
+    default: "",
+  },
+});
 
 const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
 const { tm } = useModuleI18n("core.shared");
@@ -235,43 +259,44 @@ const pluginDescription = (plugin: PluginEntry) => pluginDesc(plugin);
 
 // 判断是否为"所有插件"模式
 const isAllPlugins = computed(() => {
-  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === '*'
-})
+  return props.modelValue && props.modelValue.length === 1 && props.modelValue[0] === "*";
+});
 
 const filteredPluginList = computed(() => {
   const keywords = [props.searchKeyword, pluginSearchKeyword.value]
-    .map(keyword => String(keyword || '').trim().toLowerCase())
-    .filter(Boolean)
-  if (keywords.length === 0) return pluginList.value
+    .map((keyword) =>
+      String(keyword || "")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean);
+  if (keywords.length === 0) return pluginList.value;
   return pluginList.value.filter((plugin) => {
-    const searchableText = [
-      plugin.name,
-      pluginDisplayName(plugin),
-      pluginDescription(plugin)
-    ].filter(Boolean).join(' ').toLowerCase()
-    return keywords.every(keyword => searchableText.includes(keyword))
-  })
-})
+    const searchableText = [plugin.name, pluginDisplayName(plugin), pluginDescription(plugin)]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return keywords.every((keyword) => searchableText.includes(keyword));
+  });
+});
 
 const selectedPluginCount = computed(() => {
-  if (isAllPlugins.value) return pluginList.value.length
-  const selected = new Set(props.modelValue || [])
-  return pluginList.value.filter(plugin => selected.has(plugin.name)).length
-})
+  if (isAllPlugins.value) return pluginList.value.length;
+  const selected = new Set(props.modelValue || []);
+  return pluginList.value.filter((plugin) => selected.has(plugin.name)).length;
+});
 
-const allPluginsSelected = computed(() => (
-  pluginList.value.length > 0 && selectedPluginCount.value === pluginList.value.length
-))
+const allPluginsSelected = computed(
+  () => pluginList.value.length > 0 && selectedPluginCount.value === pluginList.value.length,
+);
 
-const somePluginsSelected = computed(() => (
-  selectedPluginCount.value > 0 && !allPluginsSelected.value
-))
+const somePluginsSelected = computed(() => selectedPluginCount.value > 0 && !allPluginsSelected.value);
 
 // 移除插件
 function removePlugin(pluginName: string) {
   if (props.modelValue && props.modelValue.length > 0) {
-    const newValue = props.modelValue.filter(name => name !== pluginName)
-    emit('update:modelValue', newValue)
+    const newValue = props.modelValue.filter((name) => name !== pluginName);
+    emit("update:modelValue", newValue);
   }
 }
 
@@ -301,21 +326,19 @@ async function openDialog() {
 async function loadPlugins() {
   loading.value = true;
   try {
-    const response = await pluginApi.list()
-    if (response.data.status === 'ok') {
+    const response = await pluginApi.list();
+    if (response.data.status === "ok") {
       const activatedPlugins = (response.data.data || [])
-        .filter(plugin => plugin.activated)
+        .filter((plugin) => plugin.activated)
         .sort((a, b) => {
           if (props.inline && Boolean(a.reserved) !== Boolean(b.reserved)) {
-            return a.reserved ? -1 : 1
+            return a.reserved ? -1 : 1;
           }
-          const nameA = pluginDisplayName(a) || a.name || '';
-          const nameB = pluginDisplayName(b) || b.name || '';
+          const nameA = pluginDisplayName(a) || a.name || "";
+          const nameB = pluginDisplayName(b) || b.name || "";
           return nameA.localeCompare(nameB);
-        })
-      pluginList.value = props.inline
-        ? activatedPlugins
-        : activatedPlugins.filter(plugin => !plugin.reserved)
+        });
+      pluginList.value = props.inline ? activatedPlugins : activatedPlugins.filter((plugin) => !plugin.reserved);
     }
   } catch (error) {
     console.error("加载插件列表失败:", error);
@@ -326,40 +349,32 @@ async function loadPlugins() {
 }
 
 function inlinePluginEnabled(plugin: PluginEntry) {
-  return isAllPlugins.value || (props.modelValue || []).includes(plugin.name)
+  return isAllPlugins.value || (props.modelValue || []).includes(plugin.name);
 }
 
 function toggleInlinePlugin(plugin: PluginEntry) {
-  const selected = new Set(
-    isAllPlugins.value
-      ? pluginList.value.map(item => item.name)
-      : (props.modelValue || [])
-  )
+  const selected = new Set(isAllPlugins.value ? pluginList.value.map((item) => item.name) : props.modelValue || []);
   if (selected.has(plugin.name)) {
-    selected.delete(plugin.name)
+    selected.delete(plugin.name);
   } else {
-    selected.add(plugin.name)
+    selected.add(plugin.name);
   }
-  const nextSelection = pluginList.value
-    .map(item => item.name)
-    .filter(name => selected.has(name))
+  const nextSelection = pluginList.value.map((item) => item.name).filter((name) => selected.has(name));
   emit(
-    'update:modelValue',
-    nextSelection.length === pluginList.value.length && pluginList.value.length > 0
-      ? ['*']
-      : nextSelection
-  )
+    "update:modelValue",
+    nextSelection.length === pluginList.value.length && pluginList.value.length > 0 ? ["*"] : nextSelection,
+  );
 }
 
 function toggleAllPlugins() {
-  emit('update:modelValue', allPluginsSelected.value ? [] : ['*'])
+  emit("update:modelValue", allPluginsSelected.value ? [] : ["*"]);
 }
 
 onMounted(() => {
   if (props.inline) {
-    loadPlugins()
+    loadPlugins();
   }
-})
+});
 
 function confirmSelection() {
   let newValue: string[] = [];

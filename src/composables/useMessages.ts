@@ -1,16 +1,16 @@
-import axios from "axios";
 import { computed, onBeforeUnmount, type Ref, reactive, ref } from "vue";
 import { fetchWithAuth } from "@/api/http";
-import { chatApi } from "@/api/v1";
-import { resolveApiUrl } from "@/utils/request";
+import { chatApi, fileApi } from "@/api/v1";
+import type { Session } from "@/composables/useSessions";
 
 export type TransportMode = "sse" | "websocket";
 
-export function buildChatRequestFlags(enableStreaming = true) {
+export function buildChatRequestFlags(enableStreaming = true, enableReasoning = true) {
   return {
     enable_inline_genui: true,
     enable_default_system_prompt: true,
     enable_streaming: enableStreaming,
+    enable_reasoning: enableReasoning,
   };
 }
 
@@ -63,6 +63,15 @@ export interface ChatRecord {
   threads?: ChatThread[];
 }
 
+export interface HistoryPaginationState {
+  page: number;
+  page_size: number;
+  total: number;
+  has_more: boolean;
+  loading: boolean;
+  error?: string;
+}
+
 export interface ChatThread {
   thread_id: string;
   parent_session_id: string;
@@ -111,6 +120,7 @@ interface SendMessageStreamOptions {
   parts: MessagePart[];
   transport: TransportMode;
   enableStreaming?: boolean;
+  enableReasoning?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
   userRecord?: ChatRecord;
@@ -123,6 +133,7 @@ interface ContinueEditedMessageOptions {
   sessionId: string;
   sourceRecord: ChatRecord;
   enableStreaming?: boolean;
+  enableReasoning?: boolean;
   selectedProvider?: string;
   selectedModel?: string;
 }
@@ -140,25 +151,32 @@ interface UseMessagesOptions {
 }
 
 export function useMessages(options: UseMessagesOptions) {
-  const loadingMessages = ref(false);
+  const loadingMessagesState = ref(false);
   const sending = ref(false);
   const messagesBySession = reactive<Record<string, ChatRecord[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
+  const sessionDetails = reactive<Record<string, Session>>({});
+  const paginationBySession = reactive<Record<string, HistoryPaginationState>>({});
   const activeConnections = reactive<Record<string, ActiveConnection>>({});
   const chatWebSockets: Record<string, WebSocket> = {};
   const closingChatWebSockets = new WeakSet<WebSocket>();
   const deferredBotAnchors = new WeakMap<ChatRecord, ChatRecord>();
   const attachmentBlobCache = new Map<string, Promise<string>>();
+  const sessionLoadEpochs = reactive<Record<string, number>>({});
+  const loadingSessionId = ref<string | null>(null);
   const sessionProjects = reactive<Record<string, ChatSessionProject | null>>({});
 
   const activeMessages = computed(() =>
     options.currentSessionId.value ? messagesBySession[options.currentSessionId.value] || [] : [],
   );
+  const loadingMessages = computed(
+    () => loadingMessagesState.value && loadingSessionId.value === options.currentSessionId.value,
+  );
 
   onBeforeUnmount(() => {
     cleanupConnections();
     for (const promise of attachmentBlobCache.values()) {
-      promise.then((url) => URL.revokeObjectURL(url)).catch(() => undefined);
+      promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
     }
     attachmentBlobCache.clear();
   });
@@ -202,16 +220,23 @@ export function useMessages(options: UseMessagesOptions) {
     const lookupFilename = storedFilename || part.filename || "";
     if (part.attachment_id) {
       cacheKey = `att:${part.attachment_id}`;
-      url = `/api/chat/get_attachment?attachment_id=${encodeURIComponent(part.attachment_id)}`;
+      url = fileApi.contentUrl(part.attachment_id);
     } else if (lookupFilename) {
       cacheKey = `file:${lookupFilename}`;
-      url = `/api/chat/get_file?filename=${encodeURIComponent(lookupFilename)}`;
+      url = "";
     } else {
       return;
     }
     let promise = attachmentBlobCache.get(cacheKey);
     if (!promise) {
-      promise = axios.get(url, { responseType: "blob" }).then((resp) => URL.createObjectURL(resp.data));
+      if (!part.attachment_id && lookupFilename) {
+        promise = fileApi.getByName(lookupFilename).then((resp) => URL.createObjectURL(resp.data));
+      } else {
+        promise = fetchWithAuth(url).then(async (resp) => {
+          if (!resp.ok) throw new Error(`Media request failed: ${resp.status}`);
+          return URL.createObjectURL(await resp.blob());
+        });
+      }
       attachmentBlobCache.set(cacheKey, promise);
     }
     try {
@@ -239,29 +264,126 @@ export function useMessages(options: UseMessagesOptions) {
     await Promise.all(tasks);
   }
 
-  async function loadSessionMessages(sessionId: string, resumeRuns = true, showLoading = true) {
+  async function loadSessionMessages(
+    sessionId: string,
+    resumeRuns = true,
+    showLoading = true,
+    preserveLoadedPages = false,
+  ) {
     if (!sessionId) return;
-    if (showLoading) loadingMessages.value = true;
+    if (showLoading) {
+      loadingMessagesState.value = true;
+      loadingSessionId.value = sessionId;
+    }
+    const epoch = (sessionLoadEpochs[sessionId] || 0) + 1;
+    sessionLoadEpochs[sessionId] = epoch;
     try {
-      const response = await axios.get("/api/chat/get_session", {
-        params: { session_id: sessionId },
+      const response = await chatApi.getSession(sessionId, {
+        page: 1,
+        page_size: 50,
       });
+      if (response.data?.status !== "ok") {
+        throw new Error(response.data?.message || "Failed to load session messages");
+      }
       const payload = response.data?.data || {};
       const history = payload.history || [];
-      const records = history.map(normalizeHistoryRecord);
+      const records: ChatRecord[] = history.map((record: any): ChatRecord => normalizeHistoryRecord(record));
       attachThreads(records, payload.threads || []);
       await resolveRecordMedia(records);
-      messagesBySession[sessionId] = records;
+      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      const previousPagination = paginationBySession[sessionId];
+      if (preserveLoadedPages && previousPagination?.page > 1) {
+        const refreshedById = new Map(
+          records.filter((record) => record.id != null).map((record) => [String(record.id), record]),
+        );
+        const existing = messagesBySession[sessionId] || [];
+        const merged = existing.map((record) => refreshedById.get(String(record.id)) || record);
+        const existingIds = new Set(existing.filter((record) => record.id != null).map((record) => String(record.id)));
+        messagesBySession[sessionId] = [
+          ...merged,
+          ...records.filter((record) => record.id == null || !existingIds.has(String(record.id))),
+        ];
+        paginationBySession[sessionId] = {
+          ...previousPagination,
+          total: Number(payload.total) || previousPagination.total,
+          has_more: previousPagination.has_more,
+          loading: false,
+          error: undefined,
+        };
+      } else {
+        messagesBySession[sessionId] = records;
+        paginationBySession[sessionId] = {
+          page: Number(payload.page) || 1,
+          page_size: Number(payload.page_size) || 50,
+          total: Number(payload.total) || records.length,
+          has_more: Boolean(payload.has_more),
+          loading: false,
+        };
+      }
       sessionProjects[sessionId] = normalizeSessionProject(payload.project);
+      if (payload.session) sessionDetails[sessionId] = payload.session;
       loadedSessions[sessionId] = true;
       if (resumeRuns && Array.isArray(payload.active_runs)) {
         await restoreNextActiveRun(sessionId, payload.active_runs);
       }
     } catch (error) {
+      if (sessionLoadEpochs[sessionId] !== epoch) return;
       console.error("Failed to load session messages:", error);
       messagesBySession[sessionId] = messagesBySession[sessionId] || [];
+      const previousPagination = paginationBySession[sessionId];
+      paginationBySession[sessionId] = {
+        page: previousPagination?.page || 1,
+        page_size: previousPagination?.page_size || 50,
+        total: previousPagination?.total || messagesBySession[sessionId].length,
+        has_more: previousPagination?.has_more || false,
+        loading: false,
+        error: String((error as Error)?.message || error),
+      };
     } finally {
-      if (showLoading) loadingMessages.value = false;
+      if (showLoading && sessionLoadEpochs[sessionId] === epoch && loadingSessionId.value === sessionId) {
+        loadingMessagesState.value = false;
+        loadingSessionId.value = null;
+      }
+    }
+  }
+
+  async function loadEarlierMessages(sessionId: string) {
+    if (!sessionId) return;
+    const state = paginationBySession[sessionId];
+    if (!state || !state.has_more || state.loading) return;
+    const epoch = sessionLoadEpochs[sessionId] || 0;
+    const nextPage = state.page + 1;
+    state.loading = true;
+    state.error = undefined;
+    try {
+      const response = await chatApi.getSession(sessionId, {
+        page: nextPage,
+        page_size: state.page_size,
+      });
+      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      if (response.data?.status !== "ok") {
+        throw new Error(response.data?.message || "Failed to load earlier messages");
+      }
+      const payload = response.data?.data || {};
+      const records = (payload.history || []).map(normalizeHistoryRecord);
+      attachThreads(records, payload.threads || []);
+      await resolveRecordMedia(records);
+      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      const existing = messagesBySession[sessionId] || [];
+      const existingIds = new Set(existing.filter((record) => record.id != null).map((record) => String(record.id)));
+      const freshRecords = records.filter(
+        (record: ChatRecord) => record.id == null || !existingIds.has(String(record.id)),
+      );
+      messagesBySession[sessionId] = [...freshRecords, ...existing];
+      state.page = Number(payload.page) || nextPage;
+      state.total = Number(payload.total) || state.total;
+      state.has_more = Boolean(payload.has_more);
+    } catch (error) {
+      if (sessionLoadEpochs[sessionId] !== epoch) return;
+      state.error = String((error as Error)?.message || error);
+      console.error("Failed to load earlier session messages:", error);
+    } finally {
+      if (sessionLoadEpochs[sessionId] === epoch) state.loading = false;
     }
   }
 
@@ -345,6 +467,7 @@ export function useMessages(options: UseMessagesOptions) {
     parts,
     transport,
     enableStreaming = true,
+    enableReasoning = true,
     selectedProvider = "",
     selectedModel = "",
     botRecord,
@@ -360,6 +483,7 @@ export function useMessages(options: UseMessagesOptions) {
         botRecord,
         userRecord,
         enableStreaming,
+        enableReasoning,
         selectedProvider,
         selectedModel,
       );
@@ -372,6 +496,7 @@ export function useMessages(options: UseMessagesOptions) {
       botRecord,
       userRecord,
       enableStreaming,
+      enableReasoning,
       selectedProvider,
       selectedModel,
       skipUserHistory,
@@ -382,10 +507,8 @@ export function useMessages(options: UseMessagesOptions) {
   async function editMessage(sessionId: string, record: ChatRecord, editedText: string) {
     if (!sessionId || record.id == null) return { needsRegenerate: false };
     const content = cloneContentWithEditedText(record, editedText);
-    const response = await axios.post("/api/chat/message/edit", {
-      session_id: sessionId,
-      message_id: record.id,
-      content,
+    const response = await chatApi.updateMessage(sessionId, record.id, {
+      content: content as unknown as Record<string, unknown>,
     });
     const payload = response.data?.data || {};
     const updated = payload.message ? normalizeHistoryRecord(payload.message) : null;
@@ -395,6 +518,12 @@ export function useMessages(options: UseMessagesOptions) {
     }
     if (payload.truncated_after_message) {
       truncateMessagesAfter(sessionId, record);
+      const pagination = paginationBySession[sessionId];
+      if (pagination?.has_more) {
+        // Deleting later rows shifts OFFSET pages; restart from the newest page.
+        pagination.page = 0;
+        pagination.error = undefined;
+      }
     }
     return {
       needsRegenerate: Boolean(payload.needs_regenerate),
@@ -414,6 +543,7 @@ export function useMessages(options: UseMessagesOptions) {
     sessionId,
     sourceRecord,
     enableStreaming = true,
+    enableReasoning = true,
     selectedProvider = "",
     selectedModel = "",
   }: ContinueEditedMessageOptions) {
@@ -441,6 +571,7 @@ export function useMessages(options: UseMessagesOptions) {
       botRecord,
       undefined,
       enableStreaming,
+      enableReasoning,
       selectedProvider,
       selectedModel,
       true,
@@ -454,6 +585,7 @@ export function useMessages(options: UseMessagesOptions) {
     selectedProvider = "",
     selectedModel = "",
     enableStreaming = true,
+    enableReasoning = true,
   ) {
     if (!sessionId || botRecord.id == null) return;
     const targetMessageId = botRecord.id;
@@ -487,7 +619,7 @@ export function useMessages(options: UseMessagesOptions) {
         body: JSON.stringify({
           selected_provider: selectedProvider,
           selected_model: selectedModel,
-          flags: buildChatRequestFlags(enableStreaming),
+          flags: buildChatRequestFlags(enableStreaming, enableReasoning),
         }),
         signal: abort.signal,
       });
@@ -518,7 +650,7 @@ export function useMessages(options: UseMessagesOptions) {
 
   async function stopSession(sessionId: string) {
     if (!sessionId) return;
-    await axios.post("/api/chat/stop", { session_id: sessionId });
+    await chatApi.stopSession(sessionId);
   }
 
   function cleanupConnections() {
@@ -572,6 +704,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
+    enableReasoning: boolean,
     selectedProvider: string,
     selectedModel: string,
     skipUserHistory = false,
@@ -590,16 +723,15 @@ export function useMessages(options: UseMessagesOptions) {
     };
     activeConnections[messageId] = connection;
 
-    fetch("/api/chat/send", {
+    fetchWithAuth(chatApi.sendStreamUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
       body: JSON.stringify({
         session_id: sessionId,
         message: parts.map(partToPayload),
-        flags: buildChatRequestFlags(enableStreaming),
+        flags: buildChatRequestFlags(enableStreaming, enableReasoning),
         selected_provider: selectedProvider,
         selected_model: selectedModel,
         _skip_user_history: skipUserHistory,
@@ -650,7 +782,7 @@ export function useMessages(options: UseMessagesOptions) {
       for (let attempt = 0; attempt < 5 && !abort.signal.aborted; attempt += 1) {
         let retryable = true;
         try {
-          const response = await fetchWithAuth(resolveApiUrl(`/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`), {
+          const response = await fetchWithAuth(chatApi.resumeRunStreamUrl(runId), {
             headers: { Accept: "text/event-stream" },
             signal: abort.signal,
           });
@@ -695,7 +827,7 @@ export function useMessages(options: UseMessagesOptions) {
       if (ownsConnection) delete activeConnections[runId];
       if (!abort.signal.aborted && ownsConnection) {
         if (!isSessionRunning(sessionId)) {
-          await loadSessionMessages(sessionId, true, false);
+          await loadSessionMessages(sessionId, true, false, true);
         }
         await options.onSessionsChanged?.();
       }
@@ -709,6 +841,7 @@ export function useMessages(options: UseMessagesOptions) {
     botRecord: ChatRecord,
     userRecord: ChatRecord | undefined,
     enableStreaming: boolean,
+    enableReasoning: boolean,
     selectedProvider: string,
     selectedModel: string,
   ) {
@@ -734,7 +867,7 @@ export function useMessages(options: UseMessagesOptions) {
       session_id: sessionId,
       message_id: messageId,
       message: parts.map(partToPayload),
-      flags: buildChatRequestFlags(enableStreaming),
+      flags: buildChatRequestFlags(enableStreaming, enableReasoning),
       selected_provider: selectedProvider,
       selected_model: selectedModel,
     });
@@ -757,7 +890,9 @@ export function useMessages(options: UseMessagesOptions) {
     const ws = new WebSocket(chatApi.unifiedWebSocketUrl(token));
     chatWebSockets[sessionId] = ws;
 
-    ws.onmessage = (event) => handleWebSocketMessage(sessionId, event);
+    ws.onmessage = (event) => {
+      handleWebSocketMessage(sessionId, event);
+    };
     ws.onerror = () => {
       for (const connection of getWebSocketConnections(sessionId, ws)) {
         if (!connection.botRecord) continue;
@@ -781,7 +916,6 @@ export function useMessages(options: UseMessagesOptions) {
       }
       if (connections.length) await options.onSessionsChanged?.();
     };
-
     return ws;
   }
 
@@ -1050,6 +1184,8 @@ export function useMessages(options: UseMessagesOptions) {
     sending,
     messagesBySession,
     loadedSessions,
+    sessionDetails,
+    paginationBySession,
     sessionProjects,
     activeMessages,
     isSessionRunning,
@@ -1058,6 +1194,7 @@ export function useMessages(options: UseMessagesOptions) {
     messageContent,
     messageParts,
     loadSessionMessages,
+    loadEarlierMessages,
     createLocalExchange,
     sendMessageStream,
     editMessage,
@@ -1108,25 +1245,25 @@ function normalizeSessionProject(value: unknown): ChatSessionProject | null {
   };
 }
 
-export function normalizeMessageParts(parts: unknown, legacyReasoning = ""): MessagePart[] {
+export function normalizeMessageParts(parts: unknown, fallbackReasoning = ""): MessagePart[] {
   const normalizedParts = normalizePartsInternal(parts);
-  if (legacyReasoning && !normalizedParts.some((part) => part.type === "think")) {
-    normalizedParts.unshift({ type: "think", think: legacyReasoning });
+  if (fallbackReasoning && !normalizedParts.some((part) => part.type === "think")) {
+    normalizedParts.unshift({ type: "think", think: fallbackReasoning });
   }
   return normalizedParts;
 }
 
-export function extractReasoningText(parts: MessagePart[] | unknown, legacyReasoning = "") {
-  const normalizedParts = Array.isArray(parts) ? parts : normalizeMessageParts(parts, legacyReasoning);
+export function extractReasoningText(parts: MessagePart[] | unknown, fallbackReasoning = "") {
+  const normalizedParts = Array.isArray(parts) ? parts : normalizeMessageParts(parts, fallbackReasoning);
   const text = normalizedParts
     .filter((part) => part.type === "think")
     .map((part) => String(part.think || ""))
     .join("");
-  return text || legacyReasoning;
+  return text || fallbackReasoning;
 }
 
-export function reasoningActivityCounts(parts: MessagePart[] | unknown, legacyReasoning = "") {
-  const normalizedParts = Array.isArray(parts) ? parts : normalizeMessageParts(parts, legacyReasoning);
+export function reasoningActivityCounts(parts: MessagePart[] | unknown, fallbackReasoning = "") {
+  const normalizedParts = Array.isArray(parts) ? parts : normalizeMessageParts(parts, fallbackReasoning);
   let thinkCount = 0;
   let toolCount = 0;
 
@@ -1326,7 +1463,10 @@ export function upsertToolCall(record: ChatRecord, toolCall: any) {
       }
     }
   }
-  record.content.message.push({ type: "tool_call", tool_calls: [{ ...toolCall }] });
+  record.content.message.push({
+    type: "tool_call",
+    tool_calls: [{ ...toolCall }],
+  });
 }
 
 export function finishToolCall(record: ChatRecord, result: any) {

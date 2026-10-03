@@ -254,15 +254,14 @@ export const usePersonaStore = defineStore("persona", {
       const deletedFolder = this.findFolderInTree(folderId);
       const isCurrentFolderDeleted =
         this.currentFolderId === folderId || this.breadcrumbPath.some((folder) => folder.folder_id === folderId);
-      const response = await axios.post("/api/persona/folder/delete", {
-        folder_id: folderId,
-      });
+      const response = await axios.post("/api/persona/folder/delete", { folder_id: folderId });
 
       if (response.data.status !== "ok") {
         throw new Error(response.data.message || "删除文件夹失败");
       }
 
-      // Return to the deleted ancestor's parent rather than retain a stale ID.
+      // If the active folder was deleted, return to its parent instead of
+      // keeping a stale folder ID that would hide moved personas and folders.
       const targetFolderId = isCurrentFolderDeleted ? (deletedFolder?.parent_id ?? null) : this.currentFolderId;
       await this.loadFolderTree();
       await this.navigateToFolder(targetFolderId);

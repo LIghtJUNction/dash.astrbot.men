@@ -1,5 +1,10 @@
 <template>
-  <v-card class="item-card hover-elevation" style="padding: 4px;" :variant="variant" elevation="0">
+  <v-card
+    class="item-card hover-elevation"
+    style="padding: 4px"
+    :variant="variant"
+    elevation="0"
+  >
     <v-card-title class="d-flex justify-space-between align-center pb-1 pt-3">
       <span class="text-h2 text-truncate" :title="getItemTitle()">{{
         getItemTitle()
@@ -158,7 +163,9 @@ export default {
   background: rgb(var(--v-theme-surface));
   position: relative;
   border-radius: 18px;
-  transition: background-color 0.16s ease, transform 0.3s ease;
+  transition:
+    background-color 0.16s ease,
+    transform 0.3s ease;
   overflow: hidden;
   min-height: 220px;
   height: 100%;
@@ -186,5 +193,4 @@ export default {
 .item-status-indicator.active {
   background-color: #4caf50;
 }
-
 </style>

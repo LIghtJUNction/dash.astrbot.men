@@ -1,7 +1,11 @@
 <template>
 
   <div class="config-page-shell">
-    <div v-if="selectedConfigID || isSystemConfig" class="config-panel">
+    <div
+      v-if="selectedConfigID || isSystemConfig"
+      class="config-panel"
+      :class="{ 'config-panel--embedded': initialConfigId !== null }"
+    >
 
       <div class="config-toolbar-sticky">
         <div
@@ -64,7 +68,6 @@
           </div>
         </div>
         <div class="config-toolbar-separator">
-          <v-divider />
           <v-progress-linear
             v-if="!fetched"
             indeterminate
@@ -124,7 +127,7 @@
                 icon="mdi-chat-processing"
                 size="x-large"
                 style="position: fixed; right: 52px; bottom: 196px"
-                color="secondary"
+                color="primary"
                 @click="openTestChat"
               />
             </template>
@@ -230,6 +233,7 @@
             v-for="config in configInfoList"
             :key="config.id"
             :title="configDisplayName(config)"
+            :subtitle="config.id"
           >
             <template #append>
               <div class="d-flex align-center" style="gap: 8px">
@@ -354,9 +358,9 @@
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import type { RouteLocationNormalized } from "vue-router";
 import { configProfileApi, systemConfigApi } from "@/api/v1";
-import ConfigProfileMenu from "@/components/config/ConfigProfileMenu.vue";
 import StandaloneChat from "@/components/chat/StandaloneChat.vue";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
+import ConfigProfileMenu from "@/components/config/ConfigProfileMenu.vue";
 import UnsavedChangesConfirmDialog from "@/components/config/UnsavedChangesConfirmDialog.vue";
 import DashboardTwoFactorDialog from "@/components/shared/DashboardTwoFactorDialog.vue";
 import WaitingForRestart from "@/components/shared/WaitingForRestart.vue";
@@ -550,8 +554,8 @@ export default {
       configSavePendingPostData: null as ConfigUpdatePayload | null,
 
       // 配置类型切换
-      configType: 'normal', // 'normal' 或 'system'
-      configSearchKeyword: '',
+      configType: "normal", // 'normal' 或 'system'
+      configSearchKeyword: "",
       configSearchExpanded: false,
 
       // 系统配置开关
@@ -791,12 +795,12 @@ export default {
       });
     },
     closeConfigSearch() {
-      this.configSearchKeyword = '';
+      this.configSearchKeyword = "";
       this.configSearchExpanded = false;
     },
     extractConfigTypeFromHash(hash: string) {
-      const rawHash = String(hash || '');
-      const lastHashIndex = rawHash.lastIndexOf('#');
+      const rawHash = String(hash || "");
+      const lastHashIndex = rawHash.lastIndexOf("#");
       if (lastHashIndex === -1) {
         return null;
       }
@@ -815,13 +819,12 @@ export default {
     },
     getConfigInfoList(abconf_id?: string) {
       // 获取配置列表
-      configProfileApi.list()
+      configProfileApi
+        .list()
         .then((res) => {
           if (res.data.status !== "ok") throw new Error(res.data.message || this.messages.loadError);
           this.configInfoList = res.data.data.info_list.flatMap((info) =>
-            typeof info.id === "string" && typeof info.name === "string"
-              ? [{ id: info.id, name: info.name }]
-              : [],
+            typeof info.id === "string" && typeof info.name === "string" ? [{ id: info.id, name: info.name }] : [],
           );
 
           if (abconf_id) {
@@ -871,7 +874,8 @@ export default {
         : this.isSystemConfig
           ? systemConfigApi.get()
           : configProfileApi.get(abconf_id || this.selectedConfigID || "default");
-      return request.then((res) => {
+      return request
+        .then((res) => {
           if (res.data.status !== "ok" || !isConfigData(res.data.data.config)) {
             throw new Error(res.data.message || this.messages.loadError);
           }
@@ -1081,7 +1085,8 @@ export default {
       }
     },
     createNewConfig(configName: string) {
-      configProfileApi.create({ name: configName })
+      configProfileApi
+        .create({ name: configName })
         .then((res) => {
           if (res.data.status === "ok") {
             this.save_message = res.data.message || this.messages.saveSuccess;
@@ -1106,10 +1111,10 @@ export default {
       return typeof name === "string" ? name.trim() : "";
     },
     configDisplayName(config: Partial<ConfigInfoItem> | null | undefined): string {
-      if (config?.id === 'default') {
-        return this.tm('configSelection.defaultConfig');
+      if (config?.id === "default") {
+        return this.tm("configSelection.defaultConfig");
       }
-      return config?.name || config?.id || '';
+      return config?.name || config?.id || "";
     },
     hasDuplicateConfigName(name: string, excludeId: string | null = null): boolean {
       const normalizedName = this.normalizeConfigName(name);
@@ -1239,7 +1244,8 @@ export default {
       }
     },
     copyConfig(configName: string) {
-      configProfileApi.get(this.copySourceConfigId)
+      configProfileApi
+        .get(this.copySourceConfigId)
         .then((res) => {
           const sourceConfig = res.data?.data?.config;
           if (res.data.status !== "ok" || !isConfigData(sourceConfig)) {
@@ -1278,7 +1284,8 @@ export default {
       }
     },
     deleteConfig(configId: string) {
-      configProfileApi.delete(configId)
+      configProfileApi
+        .delete(configId)
         .then((res) => {
           if (res.data.status === "ok") {
             this.save_message = res.data.message || this.messages.saveSuccess;
@@ -1302,7 +1309,8 @@ export default {
     },
     updateConfigInfo(configName: string) {
       if (!this.editingConfigId) return;
-      configProfileApi.rename(this.editingConfigId, configName)
+      configProfileApi
+        .rename(this.editingConfigId, configName)
         .then((res) => {
           if (res.data.status === "ok") {
             this.save_message = res.data.message || this.messages.saveSuccess;
@@ -1427,12 +1435,19 @@ export default {
   z-index: -1;
   top: 0;
   bottom: 0;
-  left: 50%;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
-  transform: translateX(-50%);
+  left: 0;
+  width: 100%;
   background: rgb(var(--v-theme-containerBg));
   content: '';
+}
+
+/* Embedded in the config drawer: stick to the drawer's top, not the app bar. */
+.config-panel--embedded .config-toolbar-sticky {
+  /* Cover the drawer's 16px top padding as well, so scrolled content does not
+     bleed through the strip above the bar. */
+  top: -16px;
+  padding-top: 16px;
+  background: rgb(var(--v-theme-containerBg));
 }
 
 .config-toolbar {
@@ -1484,11 +1499,9 @@ export default {
 
 .config-toolbar-separator {
   position: relative;
-  width: calc(100vw - var(--v-layout-left, 0px));
-  max-width: 100vw;
+  width: 100%;
   height: 1px;
-  margin-left: 50%;
-  transform: translateX(-50%);
+  margin-left: 0;
 }
 
 .config-toolbar-separator :is(.v-divider) {

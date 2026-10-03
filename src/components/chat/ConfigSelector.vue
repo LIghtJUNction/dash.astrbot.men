@@ -86,13 +86,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { configProfileApi, configRouteApi } from "@/api/v1";
+import { configProfileApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import {
   getStoredDashboardUsername,
   getStoredSelectedChatConfigId,
   setStoredSelectedChatConfigId,
 } from "@/utils/chatConfigBinding";
+import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
 
 interface ConfigInfo {
@@ -179,13 +180,8 @@ function closeDialog() {
 async function fetchConfigList() {
   loadingConfigs.value = true;
   try {
-    const res = await configProfileApi.list();
-    if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to load profiles");
-    configOptions.value = (res.data.data?.info_list || []).flatMap((info) =>
-      typeof info.id === "string" && typeof info.name === "string"
-        ? [{ id: info.id, name: info.name }]
-        : [],
-    );
+    const res = await axios.get("/api/config/abconfs");
+    configOptions.value = res.data.data?.info_list || [];
   } catch (error) {
     console.error("加载配置文件列表失败", error);
     configOptions.value = [];
@@ -196,12 +192,11 @@ async function fetchConfigList() {
 
 async function fetchRoutingEntries() {
   try {
-    const res = await configRouteApi.list();
-    if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to load routes");
+    const res = await axios.get("/api/config/umo_abconf_routes");
     const routing = res.data.data?.routing || {};
     routingEntries.value = Object.entries(routing).map(([pattern, confId]) => ({
       pattern,
-      confId,
+      confId: confId as string,
     }));
   } catch (error) {
     console.error("获取配置路由失败", error);
@@ -231,18 +226,16 @@ function resolveConfigId(umo: string | null): string {
 }
 
 async function getAgentRunnerType(confId: string): Promise<string> {
-  if (configCache.value[confId]) {
-    return configCache.value[confId];
-  }
+  if (configCache.value[confId]) return configCache.value[confId];
   try {
     const res = await configProfileApi.get(confId);
     if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to load profile");
     const config = res.data.data.config;
-    const runner = config && typeof config === "object" && "agent_runner" in config
-      ? config.agent_runner
-      : null;
-    const type = runner && typeof runner === "object" && "runner_type" in runner
-      && typeof runner.runner_type === "string" ? runner.runner_type : "local";
+    const runner = config && typeof config === "object" && "agent_runner" in config ? config.agent_runner : null;
+    const type =
+      runner && typeof runner === "object" && "runner_type" in runner && typeof runner.runner_type === "string"
+        ? runner.runner_type
+        : "local";
     configCache.value[confId] = type;
     return type;
   } catch (error) {
@@ -269,8 +262,10 @@ async function applySelectionToBackend(confId: string): Promise<boolean> {
   }
   saving.value = true;
   try {
-    const res = await configRouteApi.upsert(targetUmo.value, { config_id: confId });
-    if (res.data.status !== "ok") throw new Error(res.data.message || "Failed to update route");
+    await axios.post("/api/config/umo_abconf_route/update", {
+      umo: targetUmo.value,
+      conf_id: confId,
+    });
     const filtered = routingEntries.value.filter((entry) => entry.pattern !== targetUmo.value);
     filtered.push({ pattern: targetUmo.value, confId });
     routingEntries.value = filtered;

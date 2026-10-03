@@ -3,7 +3,14 @@
  */
 import { reactive } from "vue";
 import axios from "@/utils/request";
-import type { CommandItem, DetailsDialogState, RenameDialogState, StatusInfo, TypeInfo } from "../types";
+import type {
+  CommandItem,
+  CommandPermission,
+  DetailsDialogState,
+  RenameDialogState,
+  StatusInfo,
+  TypeInfo,
+} from "../types";
 
 export function useCommandActions(
   toast: (message: string, color?: string) => void,
@@ -121,30 +128,6 @@ export function useCommandActions(
   };
 
   /**
-   * 获取权限颜色
-   */
-  const getPermissionColor = (permission: string): string => {
-    switch (permission) {
-      case "admin":
-        return "error";
-      default:
-        return "success";
-    }
-  };
-
-  /**
-   * 获取权限标签
-   */
-  const getPermissionLabel = (permission: string, translations: { admin: string; everyone: string }): string => {
-    switch (permission) {
-      case "admin":
-        return translations.admin;
-      default:
-        return translations.everyone;
-    }
-  };
-
-  /**
    * 获取状态显示信息
    */
   const getStatusInfo = (
@@ -182,7 +165,7 @@ export function useCommandActions(
    */
   const updatePermission = async (
     cmd: CommandItem,
-    permission: "admin" | "member",
+    permission: CommandPermission,
     successMessage: string,
     errorMessage: string,
   ) => {
@@ -215,8 +198,6 @@ export function useCommandActions(
     confirmRename,
     openDetailsDialog,
     getTypeInfo,
-    getPermissionColor,
-    getPermissionLabel,
     getStatusInfo,
     getRowProps,
   };

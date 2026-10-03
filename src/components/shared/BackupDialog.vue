@@ -400,7 +400,17 @@
               <v-alert type="error" variant="tonal" class="mb-4">
                 {{ importError }}
               </v-alert>
-              <v-btn color="primary" variant="tonal" @click="resetImport">
+              <v-btn
+                v-if="canResume"
+                color="primary"
+                variant="tonal"
+                class="mr-2"
+                @click="resumeAndCheck"
+              >
+                <v-icon class="mr-2">mdi-play</v-icon>
+                {{ t("features.settings.backup.import.resumeUpload") }}
+              </v-btn>
+              <v-btn color="grey-darken-1" variant="text" @click="resetImport">
                 {{ t("features.settings.backup.import.retry") }}
               </v-btn>
             </div>
@@ -570,6 +580,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { backupApi } from "@/api/v1";
+import { useChunkedUpload } from "@/composables/useChunkedUpload";
 import { useI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 import { resolveErrorMessage } from "@/utils/errorUtils.js";
@@ -599,13 +611,6 @@ type BackupTaskProgress<T> = { task_id: string; type: "export" | "import" } & (
   | { status: "completed"; result: T }
   | { status: "failed"; error: string | null }
 );
-
-interface BackupUploadInit {
-  upload_id: string;
-  chunk_size: number;
-  total_chunks: number;
-  filename: string;
-}
 
 interface BackupExportResult {
   filename: string;
@@ -670,16 +675,22 @@ const importError = ref("");
 const uploadedFilename = ref(""); // 已上传的文件名
 const checkResult = ref<BackupCheckResult | null>(null); // 预检查结果
 
-// 分片上传状态
-const CONCURRENT_UPLOADS = 5; // 并发上传数
-const uploadId = ref("");
-const chunkSize = ref(0); // 分片大小（从后端获取）
-const uploadProgress = ref({
-  uploaded: 0,
-  total: 0,
-  percent: 0,
-  message: "",
-});
+// 分片上传状态（调度由 useChunkedUpload 管理）
+const uploader = useChunkedUpload(backupApi);
+const { canResume } = uploader;
+const uploadMessageOverride = ref(""); // 预检查阶段覆盖上传进度文案
+const uploadProgress = computed(() => ({
+  uploaded: uploader.uploadedBytes.value,
+  total: uploader.totalBytes.value,
+  percent: uploader.percent.value,
+  message:
+    uploadMessageOverride.value ||
+    {
+      init: t("features.settings.backup.import.uploadInit"),
+      chunks: t("features.settings.backup.import.uploadingChunks"),
+      complete: t("features.settings.backup.import.uploadComplete"),
+    }[uploader.phase.value],
+}));
 
 // 备份列表
 const loadingList = ref(false);
@@ -826,145 +837,58 @@ const resetExport = () => {
   exportError.value = "";
 };
 
-/**
- * 并发上传分片
- *
- * 使用并发控制同时上传多个分片，提升上传速度。
- * 后端按分片索引命名文件（如 0.part, 1.part），合并时按顺序读取，
- * 因此分片到达顺序不影响最终结果。
- */
-const uploadChunksInParallel = async (
-  file: File,
-  totalChunks: number,
-  currentUploadId: string,
-  currentChunkSize: number,
-) => {
-  // 跟踪已完成的字节数（使用原子操作避免并发问题）
-  let completedBytes = 0;
-  // 上传单个分片的函数
-  const uploadSingleChunk = async (chunkIndex: number) => {
-    const start = chunkIndex * currentChunkSize;
-    const end = Math.min(start + currentChunkSize, file.size);
-    const chunk = file.slice(start, end);
-
-    const formData = new FormData();
-    formData.append("upload_id", currentUploadId);
-    formData.append("chunk_index", chunkIndex.toString());
-    formData.append("chunk", chunk);
-
-    const response = await axios.post<BackupResponse<unknown>>("/api/backup/upload/chunk", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    if (response.data.status !== "ok") {
-      throw new Error(response.data.message);
-    }
-
-    // 更新进度（累加已完成字节）
-    completedBytes += chunk.size;
-    uploadProgress.value.uploaded = completedBytes;
-    uploadProgress.value.percent = Math.round((completedBytes / file.size) * 100);
-
-    return response;
-  };
-
-  // 创建分片索引队列
-  const pendingChunks = Array.from({ length: totalChunks }, (_, i) => i);
-  const activePromises: Promise<void>[] = [];
-
-  try {
-    while (pendingChunks.length > 0 || activePromises.length > 0) {
-      while (pendingChunks.length > 0 && activePromises.length < CONCURRENT_UPLOADS) {
-        const chunkIndex = pendingChunks.shift();
-        if (chunkIndex === undefined) break;
-        const promise: Promise<void> = uploadSingleChunk(chunkIndex).then(() => {
-          const idx = activePromises.indexOf(promise);
-          if (idx > -1) activePromises.splice(idx, 1);
-        });
-        activePromises.push(promise);
-      }
-
-      if (activePromises.length > 0) {
-        await Promise.race(activePromises);
-      }
-    }
-  } finally {
-    // Let in-flight requests settle before the caller aborts the upload session.
-    await Promise.allSettled(activePromises);
-  }
-};
-
 // 上传并检查
 const uploadAndCheck = async () => {
   const file = importFile.value;
   if (!file) return;
 
   importStatus.value = "uploading";
-  let currentUploadId = "";
+  uploadMessageOverride.value = "";
+
+  const result = await uploader.start(file);
+  if (!result) {
+    if (uploader.status.value === "error") {
+      importStatus.value = "failed";
+      importError.value = uploader.errorMessage.value;
+    }
+    return;
+  }
+
+  uploadedFilename.value = result.filename;
+  await checkUploadedBackup();
+};
+
+// 断点续传：补传缺失分片后接着预检查
+const resumeAndCheck = async () => {
+  importStatus.value = "uploading";
+  importError.value = "";
+  uploadMessageOverride.value = "";
+
+  const result = await uploader.resume();
+  if (!result) {
+    if (uploader.status.value === "error") {
+      importStatus.value = "failed";
+      importError.value = uploader.errorMessage.value;
+    }
+    return;
+  }
+
+  uploadedFilename.value = result.filename;
+  await checkUploadedBackup();
+};
+
+// 上传完成后的预检查
+const checkUploadedBackup = async () => {
+  const filename = uploadedFilename.value;
+  if (!filename) return;
+  uploadMessageOverride.value = t("features.settings.backup.import.checking");
 
   try {
-    // 初始化上传进度
-    uploadProgress.value = {
-      uploaded: 0,
-      total: file.size,
-      percent: 0,
-      message: t("features.settings.backup.import.uploadInit"),
-    };
-
-    // 步骤1: 初始化分片上传（后端计算并返回 chunk_size 和 total_chunks）
-    const initResponse = await axios.post<BackupResponse<BackupUploadInit>>("/api/backup/upload/init", {
-      filename: file.name,
-      total_size: file.size,
-    });
-
-    if (initResponse.data.status !== "ok") {
-      throw new Error(initResponse.data.message);
-    }
-
-    const session = initResponse.data.data;
-    currentUploadId = session.upload_id;
-    const currentChunkSize = session.chunk_size;
-    const totalChunks = session.total_chunks;
-    if (
-      !currentUploadId ||
-      !Number.isSafeInteger(currentChunkSize) || currentChunkSize <= 0 ||
-      !Number.isSafeInteger(totalChunks) || totalChunks <= 0 ||
-      totalChunks !== Math.ceil(file.size / currentChunkSize)
-    ) {
-      throw new Error("Invalid backup upload session");
-    }
-    uploadId.value = currentUploadId;
-    chunkSize.value = currentChunkSize;
-
-    // 步骤2: 并行分片上传（5个并发连接）
-    uploadProgress.value.message = t("features.settings.backup.import.uploadingChunks");
-
-    await uploadChunksInParallel(file, totalChunks, currentUploadId, currentChunkSize);
-
-    // 步骤3: 完成上传
-    uploadProgress.value.message = t("features.settings.backup.import.uploadComplete");
-
-    const completeResponse = await axios.post<BackupResponse<{ filename: string; size: number }>>("/api/backup/upload/complete", {
-      upload_id: currentUploadId,
-    });
-
-    if (completeResponse.data.status !== "ok") {
-      throw new Error(completeResponse.data.message);
-    }
-
-    const filename = completeResponse.data.data.filename;
-    uploadedFilename.value = filename;
-
-    // 步骤4: 预检查
-    uploadProgress.value.message = t("features.settings.backup.import.checking");
-
-    const checkResponse = await axios.post<BackupResponse<BackupCheckResult | null>>("/api/backup/check", {
-      filename,
-    });
-    if (uploadId.value !== currentUploadId || uploadedFilename.value !== filename) return;
+    const checkResponse = await backupApi.check(filename);
+    if (uploadedFilename.value !== filename) return;
 
     if (checkResponse.data.status !== "ok") {
-      throw new Error(checkResponse.data.message);
+      throw new Error(checkResponse.data.message || "Failed to check backup");
     }
 
     const result = checkResponse.data.data;
@@ -980,17 +904,7 @@ const uploadAndCheck = async () => {
     // 显示确认对话框
     importStatus.value = "confirm";
   } catch (error: unknown) {
-    // 上传失败时尝试清理已上传的分片
-    if (currentUploadId) {
-      try {
-        await axios.post("/api/backup/upload/abort", {
-          upload_id: currentUploadId,
-        });
-      } catch (abortError: unknown) {
-        console.error("Failed to abort upload:", abortError);
-      }
-    }
-
+    if (uploadedFilename.value !== filename) return;
     importStatus.value = "failed";
     importError.value = resolveErrorMessage(error, "Upload failed");
   }
@@ -1061,16 +975,8 @@ const pollImportProgress = async () => {
 
 // 重置导入状态
 const resetImport = async () => {
-  // 如果有进行中的上传，先取消
-  if (uploadId.value && importStatus.value === "uploading") {
-    try {
-      await axios.post("/api/backup/upload/abort", {
-        upload_id: uploadId.value,
-      });
-    } catch (error: unknown) {
-      console.error("Failed to abort upload:", error);
-    }
-  }
+  // 取消并清理可能存在的上传会话（包括失败后可续传的会话）
+  await uploader.cancel();
 
   importStatus.value = "idle";
   importFile.value = null;
@@ -1079,9 +985,7 @@ const resetImport = async () => {
   importError.value = "";
   uploadedFilename.value = "";
   checkResult.value = null;
-  uploadId.value = "";
-  chunkSize.value = 0;
-  uploadProgress.value = { uploaded: 0, total: 0, percent: 0, message: "" };
+  uploadMessageOverride.value = "";
 };
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
@@ -1122,7 +1026,7 @@ const restoreFromList = async (filename: string) => {
     if (!isOpen.value || uploadedFilename.value !== filename) return;
 
     if (checkResponse.data.status !== "ok") {
-      throw new Error(checkResponse.data.message);
+      throw new Error(checkResponse.data.message || "Failed to check backup");
     }
 
     const result = checkResponse.data.data;

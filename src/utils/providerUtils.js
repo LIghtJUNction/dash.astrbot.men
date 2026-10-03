@@ -1,3 +1,5 @@
+import mirarouterIcon from "@/assets/images/provider_logos/mirarouter.svg?no-inline";
+
 /**
  * 提供商相关的工具函数
  */
@@ -9,6 +11,7 @@
  */
 export function getProviderIcon(type) {
   const icons = {
+    mirarouter: mirarouterIcon,
     openai: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg",
     azure: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/azure.svg",
     xai: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg",
@@ -34,7 +37,9 @@ export function getProviderIcon(type) {
     fishaudio: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/fishaudio.svg",
     minimax: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg",
     "minimax-token-plan": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg",
-    mimo: "https://platform.xiaomimimo.com/favicon.874c9507.png",
+    mimo: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg",
+    xiaomi: "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg",
+    "xiaomi-token-plan": "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/xiaomi.svg",
     "302ai": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@1.53.0/icons/ai302-color.svg",
     microsoft: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/microsoft.svg",
     vllm: "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/vllm.svg",
@@ -64,26 +69,33 @@ export function getProviderIcon(type) {
  */
 export function isMonochromeProviderIcon(type) {
   return [
-    'openai',
-    'azure',
-    'xai',
-    'anthropic',
-    'ollama',
-    'deepseek',
-    'modelscope',
-    'zhipu',
-    'siliconflow',
-    'moonshot',
-    'kimi',
-    'kimi-code',
-    'ppio',
-    'lm_studio',
-    'minimax',
-    'minimax-token-plan',
-    'mimo',
-    'xiaomi',
-    'xiaomi-token-plan',
-    'openrouter'
+    "openai",
+    "azure",
+    "xai",
+    "anthropic",
+    "ollama",
+    "deepseek",
+    "modelscope",
+    "zhipu",
+    "siliconflow",
+    "moonshot",
+    "kimi",
+    "kimi-code",
+    "ppio",
+    "lm_studio",
+    "minimax",
+    "minimax-token-plan",
+    "mimo",
+    "xiaomi",
+    "xiaomi-token-plan",
+    "openrouter",
+    "groq",
+    "microsoft",
+    "fishaudio",
+    "vllm",
+    "huggingface",
+    "coze",
+    "deerflow",
   ].includes(type);
 }
 
