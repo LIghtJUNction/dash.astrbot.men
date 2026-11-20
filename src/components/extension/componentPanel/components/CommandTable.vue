@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
-import type { CommandItem, StatusInfo, TypeInfo } from "../types";
+import { commandPermissionOptions, commandPermissions } from "../permissions";
+import type { CommandItem, CommandPermission, StatusInfo, TypeInfo } from "../types";
 
 const { tm } = useModuleI18n("features/command");
 
@@ -18,7 +19,7 @@ const emit = defineEmits<{
   (e: "toggle-command", cmd: CommandItem): void;
   (e: "rename", cmd: CommandItem): void;
   (e: "view-details", cmd: CommandItem): void;
-  (e: "update-permission", cmd: CommandItem, permission: "admin" | "member"): void;
+  (e: "update-permission", cmd: CommandItem, permission: CommandPermission): void;
 }>();
 
 // 表格表头
@@ -89,32 +90,16 @@ const getTypeInfo = (type: string): TypeInfo => {
   }
 };
 
-// 获取权限颜色
-const getPermissionColor = (permission: string): string => {
-  switch (permission) {
-    case "admin":
-      return "error";
-    default:
-      return "success";
-  }
-};
-
-// 获取权限标签
-const getPermissionLabel = (permission: string): string => {
-  switch (permission) {
-    case "admin":
-      return tm("permission.admin");
-    default:
-      return tm("permission.everyone");
-  }
-};
-
 const isPluginInactive = (cmd: CommandItem) => !cmd.plugin_activated;
 
 // 获取状态信息
 const getStatusInfo = (cmd: CommandItem): StatusInfo => {
   if (isPluginInactive(cmd)) {
-    return { text: tm('status.pluginDisabled'), color: 'default', variant: 'outlined' };
+    return {
+      text: tm("status.pluginDisabled"),
+      color: "default",
+      variant: "outlined",
+    };
   }
   if (cmd.has_conflict) {
     return { text: tm("status.conflict"), color: "warning", variant: "flat" };
@@ -231,36 +216,38 @@ const canEditPermission = (cmd: CommandItem): boolean => !isPluginInactive(cmd) 
           <template #activator="{ props }">
             <v-chip
               v-bind="props"
-              :color="getPermissionColor(item.permission)"
+              :color="commandPermissions[item.permission].color"
               size="small"
               class="font-weight-medium cursor-pointer"
               :disabled="!canEditPermission(item)"
               link
             >
-              {{ getPermissionLabel(item.permission) }}
-              <v-icon end size="14"> mdi-chevron-down </v-icon>
+              {{ tm(commandPermissions[item.permission].label) }}
+              <v-icon end size="14">mdi-chevron-down</v-icon>
             </v-chip>
           </template>
           <v-list density="compact">
             <v-list-item
-              :value="'member'"
-              :active="item.permission !== 'admin'"
+              v-for="permission in commandPermissionOptions"
               :disabled="!canEditPermission(item)"
-              @click="$emit('update-permission', item, 'member')"
+              :key="permission"
+              :value="permission"
+              @click="$emit('update-permission', item, permission)"
+              :active="
+                (item.permission === 'everyone'
+                  ? 'member'
+                  : item.permission) === permission
+              "
             >
               <v-list-item-title>{{
-                tm("permission.everyone")
+                tm(commandPermissions[permission].label)
               }}</v-list-item-title>
-            </v-list-item>
-            <v-list-item
-              :value="'admin'"
-              :active="item.permission === 'admin'"
-              :disabled="!canEditPermission(item)"
-              @click="$emit('update-permission', item, 'admin')"
-            >
-              <v-list-item-title>{{
-                tm("permission.admin")
-              }}</v-list-item-title>
+              <v-list-item-subtitle
+                v-if="commandPermissions[permission].hint"
+                >{{
+                  tm(commandPermissions[permission].hint!)
+                }}</v-list-item-subtitle
+              >
             </v-list-item>
           </v-list>
         </v-menu>
@@ -290,7 +277,11 @@ const canEditPermission = (cmd: CommandItem): boolean => !isPluginInactive(cmd) 
               >
                 <v-icon size="22">mdi-play</v-icon>
               </v-btn>
-              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.enable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                isPluginInactive(item)
+                  ? tm("tooltips.pluginInactive")
+                  : tm("tooltips.enable")
+              }}</v-tooltip>
             </span>
             <span v-else class="command-action-tooltip">
               <v-btn
@@ -302,14 +293,28 @@ const canEditPermission = (cmd: CommandItem): boolean => !isPluginInactive(cmd) 
               >
                 <v-icon size="22">mdi-pause</v-icon>
               </v-btn>
-              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.disable') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                isPluginInactive(item)
+                  ? tm("tooltips.pluginInactive")
+                  : tm("tooltips.disable")
+              }}</v-tooltip>
             </span>
 
             <span class="command-action-tooltip">
-              <v-btn icon size="small" color="warning" :disabled="!canRename(item)" @click="emit('rename', item)">
+              <v-btn
+                icon
+                size="small"
+                color="warning"
+                :disabled="!canRename(item)"
+                @click="emit('rename', item)"
+              >
                 <v-icon size="22">mdi-pencil</v-icon>
               </v-btn>
-              <v-tooltip activator="parent" location="top">{{ isPluginInactive(item) ? tm('tooltips.pluginInactive') : tm('tooltips.rename') }}</v-tooltip>
+              <v-tooltip activator="parent" location="top">{{
+                isPluginInactive(item)
+                  ? tm("tooltips.pluginInactive")
+                  : tm("tooltips.rename")
+              }}</v-tooltip>
             </span>
 
             <v-btn icon size="small" @click="emit('view-details', item)">

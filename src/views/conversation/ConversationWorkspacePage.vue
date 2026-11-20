@@ -1,13 +1,4 @@
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
-import { RouterLink, useRoute, useRouter } from "vue-router";
 import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import {
   Bot,
@@ -26,15 +17,14 @@ import {
   Trash2,
   X,
 } from "@lucide/vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { conversationApi } from "@/api/v1";
-import MessageList from "@/components/chat/MessageList.vue";
+import ConversationHistoryPreview from "@/components/conversation/ConversationHistoryPreview.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { copyToClipboard } from "@/utils/clipboard";
-import {
-  askForConfirmation as askForConfirmationDialog,
-  useConfirmDialog,
-} from "@/utils/confirmDialog";
+import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
 
 type UmoInfo = {
@@ -86,18 +76,14 @@ const router = useRouter();
 const customizerStore = useCustomizerStore();
 const confirmDialog = useConfirmDialog();
 
-const initialUmoQuery = Array.isArray(route.query.umo)
-  ? route.query.umo[0]
-  : route.query.umo;
+const initialUmoQuery = Array.isArray(route.query.umo) ? route.query.umo[0] : route.query.umo;
 
 const conversations = ref<Conversation[]>([]);
 const availableBots = ref<BotOption[]>([]);
 const keyword = ref("");
 const selectedBotIds = ref<string[]>([]);
 const selectedTypes = ref<string[]>([]);
-const umoQuery = ref(
-  typeof initialUmoQuery === "string" ? initialUmoQuery : "",
-);
+const umoQuery = ref(typeof initialUmoQuery === "string" ? initialUmoQuery : "");
 const sortValue = ref("updated_at:desc");
 const groupBySession = ref(false);
 const mobileFiltersOpen = ref(false);
@@ -113,11 +99,10 @@ const listRequestId = ref(0);
 
 const selectedByKey = ref<Record<string, Conversation>>({});
 const activeConversation = ref<Conversation | null>(null);
-const conversationHistory = ref<any[]>([]);
+const conversationHistory = ref<unknown[]>([]);
 const previewLoading = ref(false);
 const previewRequestId = ref(0);
 const previewPageScroll = ref(0);
-const previewMessagesRef = ref<HTMLElement | null>(null);
 const rawDataDialog = ref(false);
 const rawHistoryText = ref("");
 
@@ -140,17 +125,10 @@ const hasFilters = computed(
 const selectedItems = computed(() => Object.values(selectedByKey.value));
 const allPageSelected = computed(
   () =>
-    conversations.value.length > 0 &&
-    conversations.value.every(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ),
+    conversations.value.length > 0 && conversations.value.every((item) => selectedByKey.value[conversationKey(item)]),
 );
 const somePageSelected = computed(
-  () =>
-    !allPageSelected.value &&
-    conversations.value.some(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ),
+  () => !allPageSelected.value && conversations.value.some((item) => selectedByKey.value[conversationKey(item)]),
 );
 const sessionGroups = computed<SessionGroup[]>(() => {
   const groups = new Map<string, Conversation[]>();
@@ -163,9 +141,7 @@ const sessionGroups = computed<SessionGroup[]>(() => {
     userId,
     sample: items[0],
     items,
-    selectedCount: items.filter(
-      (item) => selectedByKey.value[conversationKey(item)],
-    ).length,
+    selectedCount: items.filter((item) => selectedByKey.value[conversationKey(item)]).length,
   }));
 });
 const conversationListEntries = computed<ConversationListEntry[]>(() => {
@@ -194,9 +170,7 @@ const conversationListEntries = computed<ConversationListEntry[]>(() => {
   }
   return entries;
 });
-const botTypes = computed(() =>
-  Object.fromEntries(availableBots.value.map((bot) => [bot.id, bot.type])),
-);
+const botTypes = computed(() => Object.fromEntries(availableBots.value.map((bot) => [bot.id, bot.type])));
 const sortItems = computed(() => [
   {
     title: tm("workspace.filters.updatedDesc"),
@@ -220,65 +194,6 @@ const messageTypes = computed(() => [
   { label: tm("messageTypes.group"), value: "GroupMessage" },
 ]);
 
-const formattedMessages = computed(() => {
-  const toolResultsById: Record<string, unknown> = {};
-  for (const message of conversationHistory.value) {
-    if (message?.role === "tool" && message.tool_call_id) {
-      toolResultsById[message.tool_call_id] = message.content;
-    }
-  }
-
-  return conversationHistory.value
-    .filter(
-      (message) => message?.role === "user" || message?.role === "assistant",
-    )
-    .map((message) => {
-      const parts: any[] = [];
-      const content = message.content;
-      if (typeof content === "string" && content.trim()) {
-        parts.push({ type: "plain", text: content });
-      } else if (Array.isArray(content)) {
-        for (const item of content) {
-          if (item?.type === "text" && item.text) {
-            parts.push({ type: "plain", text: item.text });
-          } else if (item?.type === "image_url" && item.image_url?.url) {
-            parts.push({ type: "image", embedded_url: item.image_url.url });
-          }
-        }
-      } else if (content && typeof content === "object") {
-        const text = Object.values(content)
-          .filter((value) => typeof value === "string" && value.trim())
-          .join("\n");
-        if (text) parts.push({ type: "plain", text });
-      }
-
-      if (
-        message.role === "assistant" &&
-        Array.isArray(message.tool_calls) &&
-        message.tool_calls.length
-      ) {
-        parts.push({
-          type: "tool_call",
-          tool_calls: message.tool_calls.map((toolCall: any) => ({
-            id: toolCall.id,
-            name: toolCall.function?.name || toolCall.name,
-            args: toolCall.function?.arguments ?? toolCall.arguments,
-            result: toolResultsById[toolCall.id],
-            ts: 0,
-            finished_ts: 1,
-          })),
-        });
-      }
-
-      return {
-        content: {
-          type: message.role === "user" ? "user" : "bot",
-          message: parts.length ? parts : [{ type: "plain", text: "" }],
-        },
-      };
-    });
-});
-
 watch([keyword, umoQuery], () => {
   listAbortController.value?.abort();
   scheduleFetch();
@@ -288,9 +203,7 @@ watch([selectedBotIds, selectedTypes, sortValue, groupBySession], () => {
   cancelScheduledFetch();
   page.value = 1;
   expandedSessions.value =
-    groupBySession.value && activeConversation.value
-      ? { [activeConversation.value.user_id]: true }
-      : {};
+    groupBySession.value && activeConversation.value ? { [activeConversation.value.user_id]: true } : {};
   void fetchConversations();
 });
 
@@ -362,8 +275,7 @@ function messageTypeLabel(item: Conversation | null) {
 
 function platformIcon(item: Conversation | BotOption) {
   const platformId = "platform_id" in item ? item.platform_id : item.id;
-  const platformType =
-    "type" in item ? item.type : botTypes.value[platformId] || platformId;
+  const platformType = "type" in item ? item.type : botTypes.value[platformId] || platformId;
   return getPlatformIcon(platformType);
 }
 
@@ -402,10 +314,7 @@ async function fetchConversations() {
   listLoading.value = true;
   listError.value = false;
 
-  const [sortBy, sortOrder] = sortValue.value.split(":") as [
-    "created_at" | "updated_at",
-    "asc" | "desc",
-  ];
+  const [sortBy, sortOrder] = sortValue.value.split(":") as ["created_at" | "updated_at", "asc" | "desc"];
   const params: Record<string, string | number | boolean> = {
     page: page.value,
     page_size: pageSize,
@@ -415,12 +324,7 @@ async function fetchConversations() {
     group_by_session: groupBySession.value,
   };
   if (keyword.value.trim()) params.keyword = keyword.value.trim();
-  if (umoQuery.value.trim()) {
-    params.umo = umoQuery.value.trim();
-  } else {
-    params.exclude_ids = "astrbot";
-    params.exclude_platforms = "webchat";
-  }
+  if (umoQuery.value.trim()) params.umo = umoQuery.value.trim();
   if (selectedBotIds.value.length) {
     params.platforms = selectedBotIds.value.join(",");
   }
@@ -438,15 +342,12 @@ async function fetchConversations() {
     }
 
     const data = response.data.data || {};
-    conversations.value = Array.isArray(data.conversations)
-      ? data.conversations
-      : [];
+    conversations.value = Array.isArray(data.conversations) ? data.conversations : [];
     total.value = data.pagination?.total || 0;
     totalPages.value = Math.max(data.pagination?.total_pages || 1, 1);
     if (activeConversation.value) {
       const current = conversations.value.find(
-        (item) =>
-          conversationKey(item) === conversationKey(activeConversation.value!),
+        (item) => conversationKey(item) === conversationKey(activeConversation.value!),
       );
       if (current) {
         activeConversation.value = {
@@ -458,12 +359,7 @@ async function fetchConversations() {
   } catch (error: any) {
     if (controller.signal.aborted || requestId !== listRequestId.value) return;
     listError.value = true;
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.fetchError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.fetchError"), "error");
   } finally {
     if (requestId === listRequestId.value) {
       listLoading.value = false;
@@ -544,26 +440,18 @@ async function openConversation(item: Conversation) {
     const detail = response.data.data || {};
     activeConversation.value = { ...item, ...detail };
     const history = detail.history || [];
-    conversationHistory.value = Array.isArray(history)
-      ? history
-      : JSON.parse(history || "[]");
+    const parsedHistory = typeof history === "string" ? JSON.parse(history) : history;
+    if (!Array.isArray(parsedHistory)) {
+      throw new Error(tm("messages.historyError"));
+    }
+    conversationHistory.value = parsedHistory;
   } catch (error: any) {
     if (requestId !== previewRequestId.value) return;
     conversationHistory.value = [];
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.historyError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.historyError"), "error");
   } finally {
     if (requestId === previewRequestId.value) {
       previewLoading.value = false;
-      await nextTick();
-      if (requestId === previewRequestId.value && previewMessagesRef.value) {
-        previewMessagesRef.value.scrollTop =
-          previewMessagesRef.value.scrollHeight;
-      }
     }
   }
 }
@@ -605,21 +493,13 @@ async function saveTitle() {
         conversation.title = editedTitle.value.trim();
       }
     }
-    if (
-      activeConversation.value &&
-      conversationKey(activeConversation.value) === conversationKey(item)
-    ) {
+    if (activeConversation.value && conversationKey(activeConversation.value) === conversationKey(item)) {
       activeConversation.value.title = editedTitle.value.trim();
     }
     editDialog.value = false;
     notify(tm("messages.saveSuccess"));
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.saveError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.saveError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -638,21 +518,14 @@ async function exportSelected() {
     const url = window.URL.createObjectURL(response.data);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `astrbot_conversations_${new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")}.jsonl`;
+    link.download = `astrbot_conversations_${new Date().toISOString().replace(/[:.]/g, "-")}.jsonl`;
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
     notify(tm("messages.exportSuccess"));
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.exportError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.exportError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -681,10 +554,7 @@ async function deleteSelected() {
     }
     const result = response.data.data || {};
     selectedByKey.value = {};
-    if (
-      activeConversation.value &&
-      deletingKeys.has(conversationKey(activeConversation.value))
-    ) {
+    if (activeConversation.value && deletingKeys.has(conversationKey(activeConversation.value))) {
       closePreview();
     }
     if (conversations.value.length === selectedCount && page.value > 1) {
@@ -707,12 +577,7 @@ async function deleteSelected() {
       );
     }
   } catch (error: any) {
-    notify(
-      error?.response?.data?.message ||
-        error?.message ||
-        tm("messages.batchDeleteError"),
-      "error",
-    );
+    notify(error?.response?.data?.message || error?.message || tm("messages.batchDeleteError"), "error");
   } finally {
     actionLoading.value = false;
   }
@@ -721,19 +586,13 @@ async function deleteSelected() {
 async function copyUmo() {
   if (!activeConversation.value) return;
   const copied = await copyToClipboard(activeConversation.value.user_id);
-  notify(
-    copied ? tm("messages.copySuccess") : tm("messages.copyError"),
-    copied ? "success" : "error",
-  );
+  notify(copied ? tm("messages.copySuccess") : tm("messages.copyError"), copied ? "success" : "error");
 }
 
 async function copyRawData() {
   if (!rawHistoryText.value) return;
   const copied = await copyToClipboard(rawHistoryText.value);
-  notify(
-    copied ? tm("messages.copySuccess") : tm("messages.copyError"),
-    copied ? "success" : "error",
-  );
+  notify(copied ? tm("messages.copySuccess") : tm("messages.copyError"), copied ? "success" : "error");
 }
 
 function changePage(nextPage: number) {
@@ -1333,19 +1192,17 @@ function changePage(nextPage: number) {
           </v-btn>
         </div>
 
-        <div ref="previewMessagesRef" class="preview-messages">
-          <div v-if="previewLoading" class="panel-state">
+        <div v-if="previewLoading" class="preview-messages">
+          <div class="panel-state">
             <v-progress-circular indeterminate size="28" width="3" />
             <span>{{ tm("workspace.preview.loading") }}</span>
           </div>
-          <div
-            v-else-if="!formattedMessages.length"
-            class="panel-state panel-state--empty"
-          >
-            <span>{{ tm("workspace.preview.empty") }}</span>
-          </div>
-          <MessageList v-else :messages="formattedMessages" :is-dark="isDark" />
         </div>
+        <ConversationHistoryPreview
+          v-else
+          :key="conversationKey(activeConversation)"
+          :messages="conversationHistory"
+        />
       </section>
     </main>
 
@@ -1582,7 +1439,9 @@ function changePage(nextPage: number) {
   height: 28px;
   justify-content: center;
   padding: 0;
-  transition: background-color 0.16s ease, color 0.16s ease;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease;
   width: 28px;
 }
 
@@ -2041,18 +1900,6 @@ function changePage(nextPage: number) {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 2px 6px 10px;
-}
-
-.preview-messages :deep(.messages-list) {
-  padding: 12px 8px 20px;
-}
-
-.preview-messages :deep(.message-row) {
-  margin-bottom: 14px;
-}
-
-.preview-messages :deep(.bot-avatar) {
-  display: none;
 }
 
 .raw-data-card {

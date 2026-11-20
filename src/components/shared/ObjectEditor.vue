@@ -80,18 +80,28 @@
                   "
                   class="d-flex align-center gap-2 flex-grow-1"
                 >
-                  <v-slider
-                    v-if="pair.slider"
-                    :model-value="Number(pair.value) || 0"
-                    :min="pair.slider.min"
-                    :max="pair.slider.max"
-                    :step="pair.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
-                    @update:model-value="pair.value = $event"
-                  />
+                  <template v-if="pair.slider">
+                    <span style="min-width: 5px; text-align: right">
+                      {{ pair.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(pair.value) || 0"
+                      @update:model-value="pair.value = $event"
+                      :min="pair.slider.min"
+                      :max="pair.slider.max"
+                      :step="pair.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left">
+                      {{ pair.slider.max }}
+                    </span>
+                  </template>
+
                   <v-text-field
                     v-model.number="pair.value"
                     type="number"
@@ -156,8 +166,17 @@
             <v-row no-gutters align="center" class="mb-2">
               <v-col cols="4">
                 <div class="d-flex flex-column">
-                  <span class="text-caption font-weight-medium">{{ getTemplateTitle(template, templateKey) }}</span>
-                  <span v-if="template.hint" class="text-caption text-grey" style="font-size: 0.7rem;">{{ resolveTemplateText(templateKey, 'hint', template.hint) }}</span>
+                  <span class="text-caption font-weight-medium">{{
+                    getTemplateTitle(template, templateKey)
+                  }}</span>
+                  <span
+                    v-if="template.hint"
+                    class="text-caption text-grey"
+                    style="font-size: 0.7rem"
+                    >{{
+                      resolveTemplateText(templateKey, "hint", template.hint)
+                    }}</span
+                  >
                 </div>
               </v-col>
               <v-col cols="7" class="pl-2 d-flex align-center justify-end">
@@ -180,16 +199,32 @@
                   "
                   class="d-flex align-center ga-4 flex-grow-1"
                 >
-                  <v-slider
-                    v-if="template.slider"
-                    :model-value="Number(getTemplateValue(templateKey)) || 0"
-                    :min="template.slider.min"
-                    :max="template.slider.max"
-                    :step="template.slider.step"
-                    color="primary"
-                    density="compact"
-                    hide-details
-                    class="flex-grow-1"
+                  <template v-if="template.slider">
+                    <span style="min-width: 5px; text-align: right">
+                      {{ template.slider.min }}
+                    </span>
+
+                    <v-slider
+                      :model-value="Number(getTemplateValue(templateKey)) || 0"
+                      @update:model-value="
+                        updateTemplateValue(templateKey, $event)
+                      "
+                      :min="template.slider.min"
+                      :max="template.slider.max"
+                      :step="template.slider.step"
+                      color="primary"
+                      density="compact"
+                      hide-details
+                      class="flex-grow-1"
+                    ></v-slider>
+
+                    <span style="min-width: 5px; text-align: left">
+                      {{ template.slider.max }}
+                    </span>
+                  </template>
+
+                  <v-text-field
+                    :model-value="getTemplateValue(templateKey)"
                     @update:model-value="
                       updateTemplateValue(templateKey, $event)
                     "

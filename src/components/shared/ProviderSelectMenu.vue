@@ -29,16 +29,70 @@
 
       <v-card class="provider-menu-card" elevation="0">
         <div class="provider-menu-body">
-          <v-text-field
-            v-model="searchQuery"
-            :placeholder="sharedTm('providerSelector.searchPlaceholder')"
-            hide-details
-            variant="outlined"
-            density="compact"
-            prepend-inner-icon="mdi-magnify"
-            class="provider-search"
-            clearable
-          />
+          <div class="provider-search-row">
+            <v-menu
+              v-if="providerSources.length > 1"
+              v-model="sourceMenuOpen"
+              :close-on-content-click="false"
+              offset="6"
+              transition="none"
+            >
+              <template #activator="{ props: sourceMenuProps }">
+                <button
+                  v-bind="sourceMenuProps"
+                  type="button"
+                  class="provider-source-trigger"
+                  :title="sharedTm('providerSelector.filterSource')"
+                >
+                  <span>{{
+                    selectedSourceId || sharedTm("providerSelector.allSources")
+                  }}</span>
+                  <v-icon size="16">mdi-chevron-down</v-icon>
+                </button>
+              </template>
+              <v-card class="provider-source-menu" elevation="0">
+                <v-list density="compact" nav>
+                  <v-list-item
+                    :active="!selectedSourceId"
+                    @click="
+                      selectedSourceId = '';
+                      sourceMenuOpen = false;
+                    "
+                  >
+                    <v-list-item-title>{{
+                      sharedTm("providerSelector.allSources")
+                    }}</v-list-item-title>
+                  </v-list-item>
+                  <v-list-item
+                    v-for="source in providerSources"
+                    :key="source.id"
+                    :active="selectedSourceId === source.id"
+                    @click="
+                      selectedSourceId = source.id;
+                      sourceMenuOpen = false;
+                    "
+                  >
+                    <v-list-item-title>{{ source.id }}</v-list-item-title>
+                    <v-list-item-subtitle
+                      v-if="source.apiBase"
+                      :title="source.apiBase"
+                      >{{ source.apiBase }}</v-list-item-subtitle
+                    >
+                  </v-list-item>
+                </v-list>
+              </v-card>
+            </v-menu>
+            <v-text-field
+              v-model="searchQuery"
+              :placeholder="sharedTm('providerSelector.searchPlaceholder')"
+              hide-details
+              variant="outlined"
+              density="compact"
+              prepend-inner-icon="mdi-magnify"
+              class="provider-search"
+              clearable
+            />
+          </div>
 
           <v-progress-linear
             v-if="loadingProviders"
@@ -98,10 +152,12 @@
           </div>
 
           <v-list
-            v-if="!loadingProviders"
+            v-if="providersLoaded || !loadingProviders"
+            ref="providerListRef"
             density="compact"
             nav
             class="provider-menu-list"
+            @scroll.passive="providerScrollTop = $event.target.scrollTop"
           >
             <v-list-item
               v-if="!multiple && allowEmpty && !searchQuery"
@@ -127,109 +183,146 @@
               </template>
             </v-list-item>
 
-            <v-list-item
-              v-for="provider in filteredProviders"
-              :key="provider.id"
-              :active="isProviderSelected(provider.id)"
-              rounded="lg"
-              class="provider-menu-item"
-              @click="selectProvider(provider)"
+            <div
+              :style="{ height: `${visibleProviderGroups[0]?.top || 0}px` }"
+              aria-hidden="true"
+            />
+            <div
+              v-for="group in visibleProviderGroups"
+              :key="group.id"
+              class="provider-source-group"
             >
-              <v-list-item-title class="provider-item-title">
-                {{ provider.id }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="provider-subtitle">
-                <span class="model-name">
-                  {{
-                    provider.model || provider.type || provider.provider_type
-                  }}
-                </span>
-                <span
-                  v-if="
-                    capabilityBadges(provider).length ||
-                    formatContextLimit(provider, metadataForProvider(provider))
-                  "
-                  class="meta-icons"
-                >
-                  <v-tooltip
-                    v-for="item in capabilityBadges(provider)"
-                    :key="item.key"
-                    location="top"
-                    max-width="320"
-                  >
-                    <template #activator="{ props: badgeTooltipProps }">
-                      <span
-                        v-bind="badgeTooltipProps"
-                        class="meta-icon-badge"
-                        :class="{ 'meta-icon-badge--disabled': !item.enabled }"
-                        @click.stop
-                      >
-                        <v-icon size="13">{{ item.icon }}</v-icon>
-                      </span>
-                    </template>
-                    <span>{{ item.tooltip }}</span>
-                  </v-tooltip>
-                  <v-tooltip
+              <v-list-subheader class="provider-source-header">
+                {{ group.id }}
+              </v-list-subheader>
+              <div
+                :style="{ height: `${group.paddingTop}px` }"
+                aria-hidden="true"
+              />
+              <v-list-item
+                v-for="provider in group.providers"
+                :key="provider.id"
+                :data-selected="isProviderSelected(provider.id) || undefined"
+                :active="isProviderSelected(provider.id)"
+                rounded="lg"
+                class="provider-menu-item"
+                @click="selectProvider(provider)"
+              >
+                <v-list-item-title class="provider-item-title">
+                  {{ provider.id }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="provider-subtitle">
+                  <span class="model-name">
+                    {{
+                      provider.model || provider.type || provider.provider_type
+                    }}
+                  </span>
+                  <span
                     v-if="
+                      capabilityBadges(provider).length ||
                       formatContextLimit(
                         provider,
                         metadataForProvider(provider),
                       )
                     "
-                    location="top"
-                    max-width="320"
+                    class="meta-icons"
                   >
-                    <template #activator="{ props: contextTooltipProps }">
-                      <span
-                        v-bind="contextTooltipProps"
-                        class="meta-context-badge"
-                        @click.stop
-                      >
-                        {{
-                          formatContextLimit(
-                            provider,
-                            metadataForProvider(provider),
-                          )
-                        }}
-                      </span>
-                    </template>
-                    <span>{{
-                      providerTm("models.metadata.context", {
-                        tokens: formatContextLimit(
+                    <v-tooltip
+                      v-for="item in capabilityBadges(provider)"
+                      :key="item.key"
+                      location="top"
+                      max-width="320"
+                    >
+                      <template #activator="{ props: badgeTooltipProps }">
+                        <span
+                          v-bind="badgeTooltipProps"
+                          class="meta-icon-badge"
+                          :class="{
+                            'meta-icon-badge--disabled': !item.enabled,
+                          }"
+                          @click.stop
+                        >
+                          <v-icon size="13">{{ item.icon }}</v-icon>
+                        </span>
+                      </template>
+                      <span>{{ item.tooltip }}</span>
+                    </v-tooltip>
+                    <v-tooltip
+                      v-if="
+                        formatContextLimit(
                           provider,
                           metadataForProvider(provider),
-                        ),
-                      })
-                    }}</span>
-                  </v-tooltip>
-                </span>
-              </v-list-item-subtitle>
-              <template #append>
-                <div class="provider-menu-actions" @click.stop>
-                  <v-tooltip location="top">
-                    <template #activator="{ props: testTooltipProps }">
-                      <v-btn
-                        v-bind="testTooltipProps"
-                        icon="mdi-connection"
-                        size="x-small"
-                        variant="text"
-                        :loading="testingProviderIds.includes(provider.id)"
-                        :disabled="testingProviderIds.includes(provider.id)"
-                        @click.stop="testProvider(provider)"
-                      />
-                    </template>
-                    <span>{{ providerTm("models.testButton") }}</span>
-                  </v-tooltip>
-                  <v-icon
-                    v-if="isProviderSelected(provider.id)"
-                    class="provider-selected-icon"
-                    size="18"
-                  >
-                    mdi-check
-                  </v-icon>
-                </div>
-              </template>
-            </v-list-item>
+                        )
+                      "
+                      location="top"
+                      max-width="320"
+                    >
+                      <template #activator="{ props: contextTooltipProps }">
+                        <span
+                          v-bind="contextTooltipProps"
+                          class="meta-context-badge"
+                          @click.stop
+                        >
+                          {{
+                            formatContextLimit(
+                              provider,
+                              metadataForProvider(provider),
+                            )
+                          }}
+                        </span>
+                      </template>
+                      <span>{{
+                        providerTm("models.metadata.context", {
+                          tokens: formatContextLimit(
+                            provider,
+                            metadataForProvider(provider),
+                          ),
+                        })
+                      }}</span>
+                    </v-tooltip>
+                  </span>
+                </v-list-item-subtitle>
+                <template #append>
+                  <div class="provider-menu-actions" @click.stop>
+                    <v-tooltip location="top">
+                      <template #activator="{ props: testTooltipProps }">
+                        <v-btn
+                          v-bind="testTooltipProps"
+                          icon="mdi-connection"
+                          size="x-small"
+                          variant="text"
+                          :loading="testingProviderIds.includes(provider.id)"
+                          :disabled="testingProviderIds.includes(provider.id)"
+                          @click.stop="testProvider(provider)"
+                        />
+                      </template>
+                      <span>{{ providerTm("models.testButton") }}</span>
+                    </v-tooltip>
+                    <v-icon
+                      v-if="isProviderSelected(provider.id)"
+                      class="provider-selected-icon"
+                      size="18"
+                    >
+                      mdi-check
+                    </v-icon>
+                  </div>
+                </template>
+              </v-list-item>
+              <div
+                :style="{ height: `${group.paddingBottom}px` }"
+                aria-hidden="true"
+              />
+            </div>
+            <div
+              :style="{
+                height: `${
+                  (providerGroups[providerGroups.length - 1]?.bottom || 0) -
+                  (visibleProviderGroups[visibleProviderGroups.length - 1]
+                    ?.bottom || 0)
+                }px`,
+              }"
+              aria-hidden="true"
+            />
           </v-list>
 
           <div
@@ -279,25 +372,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, watch } from "vue";
+import { useDisplay } from "vuetify";
 import { providerApi } from "@/api/v1";
 import ProviderChatCompletionPanel from "@/components/provider/ProviderChatCompletionPanel.vue";
-import ProviderPage from "@/views/ProviderPage.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { useToast } from "@/utils/toast";
 import {
   formatContextLimit,
-  providerCapabilityBadges,
-  type ProviderModelMetadata,
   type ProviderMetadataSource,
+  type ProviderModelMetadata,
+  providerCapabilityBadges,
 } from "@/utils/providerMetadata";
+import { useToast } from "@/utils/toast";
+import ProviderPage from "@/views/ProviderPage.vue";
 
 interface ProviderConfig extends ProviderMetadataSource {
   id: string;
   model?: string;
   type?: string;
   provider_type?: string;
+  provider_source_id?: string;
   enable?: boolean;
+  api_base?: string;
+  embedding_api_base?: string;
+  rerank_api_base?: string;
+  gemini_tts_api_base?: string;
 }
 
 const props = withDefaults(
@@ -305,8 +404,6 @@ const props = withDefaults(
     modelValue?: string | string[];
     fallbackModel?: string;
     providerType?: string;
-    providerSubtype?: string;
-    buttonText?: string;
     variant?: "config" | "input" | "header";
     allowEmpty?: boolean;
     multiple?: boolean;
@@ -315,8 +412,6 @@ const props = withDefaults(
     modelValue: "",
     fallbackModel: "",
     providerType: "chat_completion",
-    providerSubtype: "",
-    buttonText: "",
     variant: "config",
     allowEmpty: true,
     multiple: false,
@@ -332,15 +427,24 @@ const { tm: sharedTm } = useModuleI18n("core.shared");
 const { tm: providerTm } = useModuleI18n("features/provider");
 const { success: toastSuccess, error: toastError } = useToast();
 
-const providerConfigs = ref<ProviderConfig[]>([]);
-const modelMetadata = ref<Record<string, ProviderModelMetadata>>({});
+const providerConfigs = shallowRef<ProviderConfig[]>([]);
+const modelMetadata = shallowRef<Record<string, ProviderModelMetadata>>({});
 const testingProviderIds = ref<string[]>([]);
 const searchQuery = ref("");
 const menuOpen = ref(false);
+const sourceMenuOpen = ref(false);
+const selectedSourceId = ref("");
+const providerScrollTop = ref(0);
+const { height: displayHeight } = useDisplay();
+const providerListHeight = computed(() => Math.min(360, displayHeight.value * 0.58));
+// Keep these sizes in sync with the model rows and sticky source headers below.
+const PROVIDER_ROW_HEIGHT = 56;
+const SOURCE_HEADER_HEIGHT = 32;
+let scrollToSelectionPending = false;
+const providerListRef = ref<{ $el: HTMLElement } | null>(null);
 const providerDrawer = ref(false);
 const loadingProviders = ref(false);
 const providersLoaded = ref(false);
-let loadingScope = "";
 
 const selectedProviderIds = computed(() =>
   props.multiple && Array.isArray(props.modelValue)
@@ -349,14 +453,10 @@ const selectedProviderIds = computed(() =>
 );
 
 const selectedProvider = computed(() =>
-  providerConfigs.value.find(
-    (provider) =>
-      !Array.isArray(props.modelValue) && provider.id === props.modelValue,
-  ),
+  providerConfigs.value.find((provider) => !Array.isArray(props.modelValue) && provider.id === props.modelValue),
 );
 
 const triggerTitle = computed(() => {
-  if (props.buttonText) return props.buttonText;
   if (props.multiple) {
     return selectedProviderIds.value.length > 0
       ? sharedTm("providerSelector.selectedModelCount", {
@@ -368,8 +468,7 @@ const triggerTitle = computed(() => {
   if (typeof props.modelValue === "string" && props.modelValue) {
     return props.modelValue;
   }
-  if (props.variant === "header")
-    return sharedTm("providerSelector.defaultModel");
+  if (props.variant === "header") return sharedTm("providerSelector.defaultModel");
   if (props.variant === "input") return sharedTm("providerSelector.model");
   return sharedTm("providerSelector.notSelected");
 });
@@ -387,46 +486,100 @@ const menuLocation = computed(() => {
 });
 
 const filteredProviders = computed(() => {
-  const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return providerConfigs.value;
+  const query = (searchQuery.value || "").trim().toLowerCase();
   return providerConfigs.value.filter(
     (provider) =>
-      provider.id.toLowerCase().includes(query) ||
-      String(provider.model || "")
-        .toLowerCase()
-        .includes(query),
+      (!selectedSourceId.value ||
+        (provider.provider_source_id || provider.type || provider.id) === selectedSourceId.value) &&
+      (!query ||
+        provider.id.toLowerCase().includes(query) ||
+        (provider.provider_source_id || "").toLowerCase().includes(query) ||
+        String(provider.model || "")
+          .toLowerCase()
+          .includes(query)),
   );
 });
 
+const providerSources = computed(() => {
+  const sources = new Map<string, { id: string; apiBase: string }>();
+  for (const provider of providerConfigs.value) {
+    const id = provider.provider_source_id || provider.type || provider.id;
+    if (!sources.has(id))
+      sources.set(id, {
+        id,
+        apiBase:
+          provider.api_base ||
+          provider.embedding_api_base ||
+          provider.rerank_api_base ||
+          provider.gemini_tts_api_base ||
+          "",
+      });
+  }
+  return [...sources.values()];
+});
+
+const providerGroups = computed(() => {
+  const groups = new Map<string, ProviderConfig[]>();
+  for (const provider of filteredProviders.value) {
+    const sourceId = provider.provider_source_id || provider.type || provider.id;
+    const group = groups.get(sourceId);
+    if (group) group.push(provider);
+    else groups.set(sourceId, [provider]);
+  }
+  let offset = 0;
+  return Array.from(groups, ([id, providers]) => {
+    const top = offset;
+    offset += SOURCE_HEADER_HEIGHT + providers.length * PROVIDER_ROW_HEIGHT;
+    return { id, providers, top, bottom: offset };
+  });
+});
+
+const visibleProviderGroups = computed(() => {
+  // Spacers preserve full group heights for sticky headers while only nearby rows mount.
+  const clearHeight = !props.multiple && props.allowEmpty && !searchQuery.value ? PROVIDER_ROW_HEIGHT : 0;
+  const scrollTop = providerScrollTop.value - clearHeight;
+  const start = Math.max(0, scrollTop - PROVIDER_ROW_HEIGHT * 3);
+  const end = scrollTop + providerListHeight.value + PROVIDER_ROW_HEIGHT * 3;
+  return providerGroups.value
+    .filter((group) => group.bottom >= start && group.top <= end)
+    .map((group) => {
+      const first = Math.max(
+        0,
+        Math.min(group.providers.length, Math.floor((start - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT)),
+      );
+      const last = Math.max(
+        first,
+        Math.min(group.providers.length, Math.ceil((end - group.top - SOURCE_HEADER_HEIGHT) / PROVIDER_ROW_HEIGHT)),
+      );
+      return {
+        ...group,
+        providers: group.providers.slice(first, last),
+        paddingTop: first * PROVIDER_ROW_HEIGHT,
+        paddingBottom: (group.providers.length - last) * PROVIDER_ROW_HEIGHT,
+      };
+    });
+});
+
 async function loadProviderConfigs(force = false) {
-  const scope = `${props.providerType}:${props.providerSubtype}`;
-  if (scope === loadingScope && (loadingProviders.value || (providersLoaded.value && !force))) return;
-  loadingScope = scope;
+  if (loadingProviders.value || (providersLoaded.value && !force)) return;
   loadingProviders.value = true;
   try {
     const response = await providerApi.listByProviderType(props.providerType);
-    if (loadingScope !== scope) return;
-    if (response.data.status !== "ok") throw new Error(response.data.message || providerTm("models.fetchError"));
     if (response.data.status === "ok") {
-      modelMetadata.value = (response.data.model_metadata || {}) as Record<
-        string,
-        ProviderModelMetadata
-      >;
-      providerConfigs.value = (response.data.data || []).flatMap((provider) =>
-        typeof provider.id === "string" && provider.enable !== false && (!props.providerSubtype || provider.type === props.providerSubtype)
-          ? [{ ...provider, id: provider.id } as ProviderConfig]
-          : [],
+      modelMetadata.value = (response.data.model_metadata || {}) as Record<string, ProviderModelMetadata>;
+      providerConfigs.value = ((response.data.data || []) as unknown as ProviderConfig[]).filter(
+        (provider) => provider.enable !== false,
       );
       providersLoaded.value = true;
+      if (selectedSourceId.value && !providerSources.value.some((source) => source.id === selectedSourceId.value)) {
+        selectedSourceId.value = "";
+      }
     }
   } catch (error) {
-    if (loadingScope !== scope) return;
     console.error("Failed to load provider list:", error);
-    providerConfigs.value = [];
-    providersLoaded.value = false;
-    toastError(error instanceof Error ? error.message : providerTm("models.fetchError"));
+    if (!providersLoaded.value) providerConfigs.value = [];
   } finally {
-    if (loadingScope === scope) loadingProviders.value = false;
+    loadingProviders.value = false;
   }
 }
 
@@ -454,9 +607,7 @@ function clearSelection() {
 }
 
 function isProviderSelected(providerId: string) {
-  return props.multiple
-    ? selectedProviderIds.value.includes(providerId)
-    : props.modelValue === providerId;
+  return props.multiple ? selectedProviderIds.value.includes(providerId) : props.modelValue === providerId;
 }
 
 function removeSelected(providerId: string) {
@@ -478,11 +629,7 @@ function moveSelected(index: number, delta: number) {
 }
 
 function capabilityBadges(provider: ProviderConfig) {
-  return providerCapabilityBadges(
-    provider,
-    metadataForProvider(provider),
-    providerTm,
-  );
+  return providerCapabilityBadges(provider, metadataForProvider(provider), providerTm);
 }
 
 function metadataForProvider(provider: ProviderConfig) {
@@ -504,26 +651,56 @@ async function testProvider(provider: ProviderConfig) {
         }),
       );
     } else {
-      throw new Error(
-        response.data.data.error || providerTm("models.testError"),
-      );
+      throw new Error(response.data.data.error || providerTm("models.testError"));
     }
   } catch (error: any) {
-    toastError(
-      error.response?.data?.message ||
-        error.message ||
-        providerTm("models.testError"),
-    );
+    toastError(error.response?.data?.message || error.message || providerTm("models.testError"));
   } finally {
-    testingProviderIds.value = testingProviderIds.value.filter(
-      (providerId) => providerId !== provider.id,
-    );
+    testingProviderIds.value = testingProviderIds.value.filter((providerId) => providerId !== provider.id);
   }
 }
 
 function handleMenuToggle(isOpen: boolean) {
-  if (isOpen) loadProviderConfigs(true);
+  if (isOpen) {
+    scrollToSelectionPending = true;
+    searchQuery.value = "";
+    selectedSourceId.value = "";
+    loadProviderConfigs(true);
+  }
 }
+
+watch(
+  [menuOpen, loadingProviders, searchQuery, selectedSourceId],
+  async ([isOpen, loading, query, source], [, , oldQuery, oldSource]) => {
+    if (!isOpen || (loading && !providersLoaded.value)) return;
+    await nextTick();
+    const list = providerListRef.value?.$el;
+    if (!list) return;
+    if (scrollToSelectionPending) {
+      scrollToSelectionPending = false;
+      let target = 0;
+      for (const group of providerGroups.value) {
+        const index = group.providers.findIndex((provider) => isProviderSelected(provider.id));
+        if (index < 0) continue;
+        const clearHeight = !props.multiple && props.allowEmpty && !query ? PROVIDER_ROW_HEIGHT : 0;
+        target = Math.max(
+          0,
+          clearHeight +
+            group.top +
+            SOURCE_HEADER_HEIGHT +
+            index * PROVIDER_ROW_HEIGHT -
+            (list.clientHeight - PROVIDER_ROW_HEIGHT) / 2,
+        );
+        break;
+      }
+      list.scrollTop = target;
+      providerScrollTop.value = list.scrollTop;
+    } else if (query !== oldQuery || source !== oldSource) {
+      list.scrollTop = 0;
+      providerScrollTop.value = 0;
+    }
+  },
+);
 
 function openProviderDrawer() {
   menuOpen.value = false;
@@ -540,13 +717,6 @@ function getCurrentSelection() {
     modelName: selectedProvider.value?.model || props.fallbackModel || "",
   };
 }
-
-watch(() => [props.providerType, props.providerSubtype], () => {
-  providerConfigs.value = [];
-  modelMetadata.value = {};
-  providersLoaded.value = false;
-  void loadProviderConfigs(true);
-}, { immediate: true });
 
 watch(providerDrawer, (isOpen, wasOpen) => {
   if (!isOpen && wasOpen) loadProviderConfigs(true);
@@ -617,12 +787,11 @@ defineExpose({ getCurrentSelection });
 
 .provider-trigger--header {
   height: 24px;
-  margin-top: 2px;
   padding: 0;
 }
 
 .provider-trigger--header .provider-trigger-title {
-  font-size: 17px;
+  font-size: 0.88rem;
   font-weight: 620;
   line-height: 24px;
 }
@@ -679,8 +848,43 @@ defineExpose({ getCurrentSelection });
   padding: 10px;
 }
 
-.provider-search {
+.provider-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.provider-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.provider-source-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 135px;
+  height: 40px;
+  padding: 0 8px;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.16);
+  border-radius: 10px;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 12px;
+}
+
+.provider-source-trigger span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.provider-source-menu {
+  width: min(360px, calc(100vw - 24px));
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.09);
+  border-radius: 12px !important;
 }
 
 .provider-search :deep(.v-field) {
@@ -688,7 +892,8 @@ defineExpose({ getCurrentSelection });
   box-shadow: none;
 }
 
-.provider-search :deep(.v-field__outline) {
+.provider-search :deep(.v-field .v-field__outline) {
+  --v-field-border-opacity: 1;
   color: rgba(var(--v-theme-on-surface), 0.16);
 }
 
@@ -731,9 +936,25 @@ defineExpose({ getCurrentSelection });
 }
 
 .provider-menu-item {
+  height: 54px;
   min-height: 54px !important;
-  margin-bottom: 2px;
+  margin: 0 0 2px !important;
   border-radius: 10px !important;
+}
+
+.provider-source-group {
+  display: flow-root;
+}
+
+.provider-source-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 32px;
+  min-height: 32px;
+  background: rgb(var(--v-theme-surface));
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .provider-menu-item:hover {
@@ -866,10 +1087,6 @@ defineExpose({ getCurrentSelection });
 }
 
 @media (max-width: 768px) {
-  .provider-trigger--header .provider-trigger-title {
-    font-size: 16px;
-  }
-
   .provider-trigger--header .provider-trigger-meta {
     display: none;
   }

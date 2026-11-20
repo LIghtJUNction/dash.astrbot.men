@@ -94,9 +94,18 @@ const MainRoutes = {
       ],
     },
     {
-      name: "PluginPage",
-      path: "/plugin-page/:pluginName/:pageName",
+      name: "PluginView",
+      path: "/plugin-view/:pluginName/:pageName",
       component: () => import("@/views/PluginPagePage.vue"),
+    },
+    {
+      // Legacy alias of the plugin view route.
+      path: "/plugin-page/:pluginName/:pageName",
+      redirect: (to: RouteLocationGeneric) => ({
+        name: "PluginView",
+        params: to.params,
+        query: to.query,
+      }),
     },
     {
       path: "/extension/:pluginId",
@@ -143,11 +152,11 @@ const MainRoutes = {
     },
     {
       path: "/normal",
-      redirect: "/config#normal",
+      redirect: "/config",
     },
     {
       path: "/system",
-      redirect: "/config#system",
+      redirect: "/settings#system-config",
     },
     {
       name: "SessionManagement",

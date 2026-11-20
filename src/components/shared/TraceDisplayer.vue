@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { EventSourcePolyfill, type MessageEvent as SseMessageEvent } from "event-source-polyfill";
 import { onBeforeUnmount, onMounted, shallowRef } from "vue";
+import { logApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
-import axios, { resolveApiUrl } from "@/utils/request";
 
 interface TraceLog {
   type: string;
@@ -74,10 +74,24 @@ onBeforeUnmount(() => {
 async function fetchTraceHistory() {
   if (!isMounted) return;
   try {
-    const res = await axios.get("/api/log-history");
+    const res = await logApi.history();
     if (!isMounted) return;
-    const logs: TraceLog[] = res.data?.data?.logs || [];
-    processNewTraces(logs.filter((item) => item.type === "trace"));
+    const logs: unknown[] = res.data?.data?.logs || [];
+    processNewTraces(
+      logs.filter(
+        (item): item is TraceLog =>
+          typeof item === "object" &&
+          item !== null &&
+          "type" in item &&
+          "span_id" in item &&
+          "time" in item &&
+          "action" in item &&
+          item.type === "trace" &&
+          typeof item.span_id === "string" &&
+          typeof item.time === "number" &&
+          typeof item.action === "string",
+      ),
+    );
   } catch (error) {
     console.error("Failed to fetch trace history:", error);
   }
@@ -89,7 +103,7 @@ function connectSSE() {
   eventSource = null;
   const token = localStorage.getItem("token");
   if (!token) return;
-  eventSource = new EventSourcePolyfill(resolveApiUrl("/api/live-log"), {
+  eventSource = new EventSourcePolyfill(logApi.liveUrl(), {
     headers: { Authorization: `Bearer ${token}` },
     heartbeatTimeout: 300000,
     withCredentials: true,
@@ -245,10 +259,16 @@ function formatFields(fields: unknown): string {
         v-for="(event, idx) in events"
         :key="event.span_id"
         class="tl-item"
-        :class="{ 'tl-item-active': highlightMap[event.span_id], 'tl-item-expanded': !event.collapsed }"
+        :class="{
+          'tl-item-active': highlightMap[event.span_id],
+          'tl-item-expanded': !event.collapsed,
+        }"
       >
         <div class="tl-track">
-          <div class="tl-dot" :class="{ 'tl-dot-active': event.hasAgentPrepare }"></div>
+          <div
+            class="tl-dot"
+            :class="{ 'tl-dot-active': event.hasAgentPrepare }"
+          ></div>
           <div v-if="idx < events.length - 1" class="tl-line"></div>
         </div>
         <div class="tl-card">
@@ -262,28 +282,48 @@ function formatFields(fields: unknown): string {
             @keydown.space.prevent="toggleEvent(event.span_id)"
           >
             <div class="tl-card-top">
-              <span class="tl-event-id" :title="event.span_id">{{ shortSpan(event.span_id) }}</span>
+              <span class="tl-event-id" :title="event.span_id">{{
+                shortSpan(event.span_id)
+              }}</span>
               <span class="tl-umo">{{ event.umo || "-" }}</span>
               <span class="tl-time">{{ formatTime(event.first_time) }}</span>
             </div>
             <div class="tl-card-bottom">
-              <span class="tl-sender">{{ event.sender_name || "Unknown" }}</span>
+              <span class="tl-sender">{{
+                event.sender_name || "Unknown"
+              }}</span>
               <span class="tl-outline">{{ event.message_outline || "-" }}</span>
-              <span class="tl-expand-btn">{{ event.collapsed ? tm("expand") : tm("collapse") }}</span>
+              <span class="tl-expand-btn">{{
+                event.collapsed ? tm("expand") : tm("collapse")
+              }}</span>
             </div>
           </div>
-          <div v-if="!event.collapsed && event.records.length > 0" class="tl-records">
-            <div class="tl-records-header">调用链 · {{ event.records.length }} 条记录</div>
-            <div v-for="record in getVisibleRecords(event)" :key="record.key" class="tl-record">
+          <div
+            v-if="!event.collapsed && event.records.length > 0"
+            class="tl-records"
+          >
+            <div class="tl-records-header">
+              调用链 · {{ event.records.length }} 条记录
+            </div>
+            <div
+              v-for="record in getVisibleRecords(event)"
+              :key="record.key"
+              class="tl-record"
+            >
               <div class="tl-record-left">
                 <div class="tl-record-time">{{ record.timeLabel }}</div>
                 <div class="tl-record-action">{{ record.action }}</div>
               </div>
               <pre class="tl-record-fields">{{ record.fieldsText }}</pre>
             </div>
-            <div v-if="event.visibleCount < event.records.length" class="tl-records-more">
+            <div
+              v-if="event.visibleCount < event.records.length"
+              class="tl-records-more"
+            >
               <button type="button" @click.stop="showMore(event.span_id)">
-                {{ tm("showMore") }} (+{{ event.records.length - event.visibleCount }})
+                {{ tm("showMore") }} (+{{
+                  event.records.length - event.visibleCount
+                }})
               </button>
             </div>
           </div>
@@ -336,7 +376,8 @@ function formatFields(fields: unknown): string {
   font-size: 24px;
   border-radius: 999px;
   background: var(--trace-empty-icon-bg, rgba(0, 242, 255, 0.12));
-  box-shadow: inset 0 0 0 1px var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  box-shadow: inset 0 0 0 1px
+    var(--trace-border-strong, rgba(0, 242, 255, 0.18));
 }
 
 .tl-empty-text {
@@ -356,9 +397,21 @@ function formatFields(fields: unknown): string {
   -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
 }
 
-.tl-item { display: flex; gap: 0; margin-bottom: 0; }
-.tl-item:last-child .tl-line { display: none; }
-.tl-track { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 32px; }
+.tl-item {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+}
+.tl-item:last-child .tl-line {
+  display: none;
+}
+.tl-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 32px;
+}
 .tl-dot {
   width: 12px;
   height: 12px;
@@ -370,10 +423,27 @@ function formatFields(fields: unknown): string {
   z-index: 1;
   transition: all 0.3s ease;
 }
-.tl-dot-active { background: var(--trace-primary, #00f2ff); border-color: var(--trace-primary, #00f2ff); box-shadow: 0 0 8px rgba(0, 242, 255, 0.5); }
-.tl-item-active .tl-dot { background: var(--trace-primary, #00f2ff); border-color: var(--trace-primary, #00f2ff); box-shadow: 0 0 12px rgba(0, 242, 255, 0.8); transform: scale(1.3); }
-.tl-line { width: 2px; flex: 1; background: var(--trace-track, rgba(71, 85, 105, 0.42)); margin-top: 4px; min-height: 20px; }
-.tl-item-active .tl-line { background: var(--trace-track-active, rgba(0, 242, 255, 0.3)); }
+.tl-dot-active {
+  background: var(--trace-primary, #00f2ff);
+  border-color: var(--trace-primary, #00f2ff);
+  box-shadow: 0 0 8px rgba(0, 242, 255, 0.5);
+}
+.tl-item-active .tl-dot {
+  background: var(--trace-primary, #00f2ff);
+  border-color: var(--trace-primary, #00f2ff);
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.8);
+  transform: scale(1.3);
+}
+.tl-line {
+  width: 2px;
+  flex: 1;
+  background: var(--trace-track, rgba(71, 85, 105, 0.42));
+  margin-top: 4px;
+  min-height: 20px;
+}
+.tl-item-active .tl-line {
+  background: var(--trace-track-active, rgba(0, 242, 255, 0.3));
+}
 
 .tl-card {
   flex: 1;
@@ -384,13 +454,32 @@ function formatFields(fields: unknown): string {
   border: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
   border-radius: 12px;
   overflow: hidden;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    transform 0.3s ease;
 }
-.tl-item-active .tl-card { border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38)); box-shadow: var(--trace-shadow, 0 10px 24px rgba(15, 23, 42, 0.08)); }
-.tl-item-expanded .tl-card { border-color: var(--trace-border-strong, rgba(0, 242, 255, 0.18)); }
-.tl-card-header { padding: 14px 16px; cursor: pointer; transition: background 0.2s ease; }
-.tl-card-header:hover { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); }
-.tl-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.tl-item-active .tl-card {
+  border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
+  box-shadow: var(--trace-shadow, 0 10px 24px rgba(15, 23, 42, 0.08));
+}
+.tl-item-expanded .tl-card {
+  border-color: var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+}
+.tl-card-header {
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.tl-card-header:hover {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+}
+.tl-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
 .tl-event-id {
   font-size: 12px;
   font-weight: 700;
@@ -401,35 +490,172 @@ function formatFields(fields: unknown): string {
   border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
   font-family: var(--astrbot-font-mono);
 }
-.tl-umo { font-size: 11px; color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important; -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76)); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-time { font-size: 10px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); flex-shrink: 0; font-family: var(--astrbot-font-mono); }
-.tl-card-bottom { display: flex; align-items: center; gap: 12px; }
-.tl-sender { font-size: 13px; font-weight: 600; color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important; -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92)); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-outline { flex: 1; font-size: 13px; color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important; -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tl-expand-btn { font-size: 11px; font-weight: 600; color: var(--trace-primary, #00f2ff); background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18)); padding: 4px 10px; border-radius: 999px; flex-shrink: 0; font-family: var(--astrbot-font-mono); }
+.tl-umo {
+  font-size: 11px;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-time {
+  font-size: 10px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  flex-shrink: 0;
+  font-family: var(--astrbot-font-mono);
+}
+.tl-card-bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tl-sender {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-outline {
+  flex: 1;
+  font-size: 13px;
+  color: var(--trace-muted, rgba(203, 213, 225, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-muted, rgba(203, 213, 225, 0.76));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-expand-btn {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--trace-primary, #00f2ff);
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  padding: 4px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-family: var(--astrbot-font-mono);
+}
 
-.tl-records { border-top: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); background: var(--trace-record-bg, rgba(3, 10, 16, 0.52)); padding: 14px 16px; }
-.tl-records-header { font-size: 11px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); letter-spacing: 0.04em; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); font-family: var(--astrbot-font-mono); }
-.tl-record { display: flex; gap: 12px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3)); }
-.tl-record:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-.tl-record-left { flex-shrink: 0; width: 200px; }
-.tl-record-time { font-size: 10px; color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important; -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76)); margin-bottom: 2px; font-family: var(--astrbot-font-mono); }
-.tl-record-action { font-size: 11px; font-weight: 700; color: var(--trace-primary, #00f2ff); font-family: var(--astrbot-font-mono); }
-.tl-record-fields { flex: 1; min-width: 0; margin: 0; font-size: 11px; color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important; -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92)); white-space: pre-wrap; word-break: break-word; font-family: inherit; background: transparent; border: none; padding: 0; line-height: 1.6; }
-.tl-records-more { text-align: center; padding-top: 10px; }
-.tl-records-more button { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18)); color: var(--trace-primary, #00f2ff); padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 11px; font-family: var(--astrbot-font-mono); transition: all 0.2s ease; }
-.tl-records-more button:hover { background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1)); border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38)); }
-.timeline-container :is(div, span, pre, button) { mix-blend-mode: normal; }
+.tl-records {
+  border-top: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  background: var(--trace-record-bg, rgba(3, 10, 16, 0.52));
+  padding: 14px 16px;
+}
+.tl-records-header {
+  font-size: 11px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+  font-family: var(--astrbot-font-mono);
+}
+.tl-record {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--trace-border, rgba(83, 104, 120, 0.3));
+}
+.tl-record:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.tl-record-left {
+  flex-shrink: 0;
+  width: 200px;
+}
+.tl-record-time {
+  font-size: 10px;
+  color: var(--trace-subtle, rgba(148, 163, 184, 0.76)) !important;
+  -webkit-text-fill-color: var(--trace-subtle, rgba(148, 163, 184, 0.76));
+  margin-bottom: 2px;
+  font-family: var(--astrbot-font-mono);
+}
+.tl-record-action {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--trace-primary, #00f2ff);
+  font-family: var(--astrbot-font-mono);
+}
+.tl-record-fields {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  color: var(--trace-text, rgba(226, 232, 240, 0.92)) !important;
+  -webkit-text-fill-color: var(--trace-text, rgba(226, 232, 240, 0.92));
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  line-height: 1.6;
+}
+.tl-records-more {
+  text-align: center;
+  padding-top: 10px;
+}
+.tl-records-more button {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border: 1px solid var(--trace-border-strong, rgba(0, 242, 255, 0.18));
+  color: var(--trace-primary, #00f2ff);
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--astrbot-font-mono);
+  transition: all 0.2s ease;
+}
+.tl-records-more button:hover {
+  background: var(--trace-primary-soft, rgba(0, 242, 255, 0.1));
+  border-color: var(--trace-border-active, rgba(0, 242, 255, 0.38));
+}
+.timeline-container :is(div, span, pre, button) {
+  mix-blend-mode: normal;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .tl-dot, .tl-card, .tl-card-header, .tl-records-more button { transition: none; }
+  .tl-dot,
+  .tl-card,
+  .tl-card-header,
+  .tl-records-more button {
+    transition: none;
+  }
 }
 
 @media (max-width: 700px) {
-  .tl-umo { display: none; }
-  .tl-card-top, .tl-card-bottom, .tl-record { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .tl-record-left, .tl-sender { width: 100%; max-width: none; }
-  .trace-timeline, .timeline-container { padding: 16px; }
-  .tl-empty { min-height: 260px; padding: 40px 20px; }
+  .tl-umo {
+    display: none;
+  }
+  .tl-card-top,
+  .tl-card-bottom,
+  .tl-record {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .tl-record-left,
+  .tl-sender {
+    width: 100%;
+    max-width: none;
+  }
+  .trace-timeline,
+  .timeline-container {
+    padding: 16px;
+  }
+  .tl-empty {
+    min-height: 260px;
+    padding: 40px 20px;
+  }
 }
 </style>

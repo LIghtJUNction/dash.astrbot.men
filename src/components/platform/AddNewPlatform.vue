@@ -9,10 +9,10 @@
       <v-card-title class="text-h3 pa-4 pb-0 pl-6">
         {{
           updatingMode
-            ? `${tm('dialog.edit')} ${updatingPlatformConfig.id} ${tm(
-                'dialog.adapter',
+            ? `${tm("dialog.edit")} ${updatingPlatformConfig.id} ${tm(
+                "dialog.adapter",
               )}`
-            : tm('dialog.addPlatform')
+            : tm("dialog.addPlatform")
         }}
       </v-card-title>
       <v-card-text
@@ -102,8 +102,14 @@
                       class="creation-mode-group"
                       hide-details
                     >
-                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
-                      <v-radio value="manual" :label="tm('registrationAction.mode.larkManual')"></v-radio>
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.larkManual')"
+                      ></v-radio>
                     </v-radio-group>
 
                     <div
@@ -132,7 +138,12 @@
 
                     <div v-else-if="larkCreationMode === 'manual'" class="mt-2">
                       <div class="platform-action-row">
-                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
                         </v-btn>
@@ -154,8 +165,14 @@
                       class="creation-mode-group"
                       hide-details
                     >
-                      <v-radio value="scan" :label="tm('registrationAction.mode.scan')"></v-radio>
-                      <v-radio value="manual" :label="tm('registrationAction.mode.manual')"></v-radio>
+                      <v-radio
+                        value="scan"
+                        :label="tm('registrationAction.mode.scan')"
+                      ></v-radio>
+                      <v-radio
+                        value="manual"
+                        :label="tm('registrationAction.mode.manual')"
+                      ></v-radio>
                     </v-radio-group>
 
                     <div
@@ -181,9 +198,17 @@
                       />
                     </div>
 
-                    <div v-else-if="dingtalkCreationMode === 'manual'" class="mt-2">
+                    <div
+                      v-else-if="dingtalkCreationMode === 'manual'"
+                      class="mt-2"
+                    >
                       <div class="platform-action-row">
-                        <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                        <v-btn
+                          color="info"
+                          variant="tonal"
+                          @click="openTutorial"
+                          class="mt-2"
+                        >
                           <v-icon start>mdi-book-open-variant</v-icon>
                           {{ tm("dialog.viewTutorial") }}
                         </v-btn>
@@ -288,7 +313,12 @@
 
                   <div v-else class="mt-2">
                     <div class="platform-action-row">
-                      <v-btn color="info" variant="tonal" @click="openTutorial" class="mt-2">
+                      <v-btn
+                        color="info"
+                        variant="tonal"
+                        @click="openTutorial"
+                        class="mt-2"
+                      >
                         <v-icon start>mdi-book-open-variant</v-icon>
                         {{ tm("dialog.viewTutorial") }}
                       </v-btn>
@@ -571,9 +601,7 @@
                               color="primary"
                               class="umo-selection-chip"
                             >
-                              {{
-                                getKnownRouteUmoSelectionText(sourceItem)
-                              }}
+                              {{ getKnownRouteUmoSelectionText(sourceItem) }}
                             </v-chip>
                           </template>
                         </v-autocomplete>
@@ -789,43 +817,16 @@
     </v-card>
   </v-dialog>
 
-  <v-overlay
+  <ConfigProfileDrawer
     v-model="showConfigDrawer"
-    class="config-drawer-overlay"
-    location="right"
-    transition="slide-x-reverse-transition"
-    :scrim="true"
-    @click:outside="closeConfigDrawer"
-  >
-    <v-card class="config-drawer-card" elevation="12">
-      <div class="config-drawer-header">
-        <div>
-          <span class="text-h6">{{
-            tm("createDialog.configDrawerTitle")
-          }}</span>
-          <div v-if="configDrawerTargetId" class="text-caption text-grey">
-            {{ tm("createDialog.configDrawerIdLabel") }}:
-            {{ configDrawerTargetId }}
-          </div>
-        </div>
-        <v-btn icon variant="text" @click="closeConfigDrawer">
-          <v-icon>mdi-close</v-icon>
-        </v-btn>
-      </div>
-      <v-divider />
-      <div class="config-drawer-content">
-        <ConfigPage
-          v-if="showConfigDrawer"
-          :initial-config-id="configDrawerTargetId ?? undefined"
-        />
-      </div>
-    </v-card>
-  </v-overlay>
+    :config-id="configDrawerTargetId || ''"
+  />
 </template>
 
 <script lang="ts">
 import { botApi } from "@/api/v1";
 import AstrBotCoreConfigWrapper from "@/components/config/AstrBotCoreConfigWrapper.vue";
+import ConfigProfileDrawer from "@/components/config/ConfigProfileDrawer.vue";
 import PlatformRegistrationAction from "@/components/platform/PlatformRegistrationAction.vue";
 import AstrBotConfig from "@/components/shared/AstrBotConfig.vue";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
@@ -836,7 +837,6 @@ import {
   getTutorialLink,
 } from "@/utils/platformUtils";
 import axios, { resolveApiUrl } from "@/utils/request";
-import ConfigPage from "@/views/ConfigPage.vue";
 
 interface RouteEntry {
   umop: string | null;
@@ -880,7 +880,7 @@ export default {
   components: {
     AstrBotConfig,
     AstrBotCoreConfigWrapper,
-    ConfigPage,
+    ConfigProfileDrawer,
     PlatformRegistrationAction,
     UmoDisplay,
   },
@@ -1473,7 +1473,11 @@ export default {
         console.info(`成功更新路由表: ${umop} -> ${configId}`);
       } catch (_err) {
         console.error("更新路由表失败:", _err);
-        throw new Error(this.tm("messages.routingUpdateFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.routingUpdateFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
@@ -1492,7 +1496,11 @@ export default {
         return newConfigId;
       } catch (_err) {
         console.error("创建新配置文件失败:", _err);
-        throw new Error(this.tm("messages.createConfigFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.createConfigFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
@@ -1725,7 +1733,11 @@ export default {
         });
       } catch (_err) {
         console.error("保存路由表失败:", _err);
-        throw new Error(this.tm("messages.routingSaveFailed", { message: this.getErrorMessage(_err) }));
+        throw new Error(
+          this.tm("messages.routingSaveFailed", {
+            message: this.getErrorMessage(_err),
+          }),
+        );
       }
     },
 
@@ -1879,7 +1891,10 @@ export default {
       const ref = this.$refs.dialogScrollContainer;
       if (!ref) return;
       const el = ((ref as { $el?: HTMLElement }).$el || ref) as HTMLElement;
-      const scrollOptions: ScrollToOptions = { top: el.scrollHeight, behavior: "smooth" };
+      const scrollOptions: ScrollToOptions = {
+        top: el.scrollHeight,
+        behavior: "smooth",
+      };
       if (typeof el.scrollTo === "function") {
         el.scrollTo(scrollOptions);
       } else {
@@ -1887,7 +1902,10 @@ export default {
       }
     },
     getErrorMessage(err: unknown): string {
-      const ae = err as { response?: { data?: { message?: string } }; message?: string };
+      const ae = err as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
       return ae.response?.data?.message || ae.message || String(err);
     },
   },
