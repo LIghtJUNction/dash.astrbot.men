@@ -179,21 +179,24 @@
       <v-card-title class="d-flex align-center">
         <v-icon class="mr-2" size="20">mdi-key</v-icon>
         {{ tm("apiKey.manageTitle") }}
-        <v-btn
-          icon
-          size="x-small"
-          variant="text"
-          class="ml-2"
-          :aria-label="tm('apiKey.docsLink')"
-          href="https://docs.astrbot.app/dev/openapi.html"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <v-icon size="18">mdi-help-circle-outline</v-icon>
-          <v-tooltip activator="parent" location="top">
-            {{ tm("apiKey.docsLink") }}
-          </v-tooltip>
-        </v-btn>
+        <v-tooltip location="top">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon
+              size="x-small"
+              variant="text"
+              class="ml-2"
+              :aria-label="tm('apiKey.docsLink')"
+              href="https://docs.astrbot.app/dev/openapi.html"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <v-icon size="18">mdi-help-circle-outline</v-icon>
+            </v-btn>
+          </template>
+          <span>{{ tm("apiKey.docsLink") }}</span>
+        </v-tooltip>
       </v-card-title>
       <v-card-subtitle>{{ tm("apiKey.subtitle") }}</v-card-subtitle>
       <v-card-text>
