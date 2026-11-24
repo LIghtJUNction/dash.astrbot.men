@@ -5,7 +5,7 @@
     :fallback-model="selectedModelName"
     provider-type="chat_completion"
     :variant="variant"
-    :allow-empty="false"
+    :allow-empty="true"
     @update:model-value="updateSelection"
     @select="saveSelection"
   />
@@ -13,7 +13,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import type ProviderSelectMenu from "@/components/shared/ProviderSelectMenu.vue";
+import ProviderSelectMenu from "@/components/shared/ProviderSelectMenu.vue";
 import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 
 interface ProviderSelection {
@@ -39,8 +39,7 @@ function updateSelection(value: string | string[]) {
 }
 
 function saveSelection(provider: ProviderSelection | null) {
-  if (!provider) return;
-  setSelection(provider.id, provider.model || "");
+  setSelection(provider?.id || "", provider?.model || "");
 }
 
 function getCurrentSelection() {

@@ -116,42 +116,65 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { statsApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { useToastStore } from "@/stores/toast";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
-import axios from "@/utils/request";
+import { resolveErrorMessage } from "@/utils/errorUtils";
+
+type CleanupTarget = "logs" | "cache" | "traces" | "all";
+
+interface StorageDirectoryStatus {
+  size_bytes?: number;
+  file_count?: number;
+  path?: string;
+  exists?: boolean;
+}
+
+interface StorageStatus {
+  logs?: StorageDirectoryStatus;
+  cache?: StorageDirectoryStatus;
+  traces?: StorageDirectoryStatus;
+  total_bytes?: number;
+}
+
+interface StorageCard {
+  key: Exclude<CleanupTarget, "all">;
+  title: string;
+  subtitle: string;
+  color: string;
+  fileCount: number;
+  path: string;
+  buttonText: string;
+  icon: string;
+  sizeBytes: number;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const isStorageDirectoryStatus = (value: unknown): value is StorageDirectoryStatus =>
+  isRecord(value) &&
+  (value.size_bytes === undefined || typeof value.size_bytes === "number") &&
+  (value.file_count === undefined || typeof value.file_count === "number") &&
+  (value.path === undefined || typeof value.path === "string") &&
+  (value.exists === undefined || typeof value.exists === "boolean");
+
+const isStorageStatus = (value: unknown): value is StorageStatus =>
+  isRecord(value) &&
+  (value.total_bytes === undefined || typeof value.total_bytes === "number") &&
+  ["logs", "cache", "traces"].every((key) => value[key] === undefined || isStorageDirectoryStatus(value[key]));
+
+const parseStorageStatus = (value: unknown): StorageStatus => {
+  if (!isStorageStatus(value)) {
+    throw new Error("Invalid storage status response");
+  }
+  return value;
+};
 
 const { tm } = useModuleI18n("features/settings");
 const toastStore = useToastStore();
 const confirmDialog = useConfirmDialog();
-
-type CleanupTarget = "all" | "logs" | "cache";
-
-interface StorageEntry {
-  size_bytes: number;
-  file_count: number;
-  path: string;
-  exists: boolean;
-}
-
-interface StorageStatus {
-  logs: StorageEntry;
-  cache: StorageEntry;
-  total_bytes: number;
-}
-
-interface CleanupResult {
-  status: StorageStatus;
-  removed_bytes: number;
-  processed_files: number;
-}
-
-interface StorageResponse<T> {
-  status: "ok" | "error";
-  message?: string;
-  data?: T | null;
-}
 
 const statusLoading = ref(false);
 const cleaningTarget = ref<CleanupTarget | "">("");
@@ -163,6 +186,12 @@ const storageStatus = ref<StorageStatus>({
     exists: false,
   },
   cache: {
+    size_bytes: 0,
+    file_count: 0,
+    path: "",
+    exists: false,
+  },
+  traces: {
     size_bytes: 0,
     file_count: 0,
     path: "",
@@ -196,40 +225,51 @@ const formatBytes = (bytes: number) => {
   return `${size.toFixed(decimals)} ${units[unitIndex]}`;
 };
 
-const storageCards = computed(() => [
+const storageCards = computed<StorageCard[]>(() => [
   {
-    key: "cache" as const,
+    key: "cache",
     title: tm("system.cleanup.targets.cache.title"),
     subtitle: tm("system.cleanup.targets.cache.subtitle"),
-    buttonText: tm("system.cleanup.targets.cache.button"),
-    icon: "mdi-database-refresh-outline",
     color: "primary",
-    sizeBytes: storageStatus.value.cache?.size_bytes || 0,
     fileCount: storageStatus.value.cache?.file_count || 0,
     path: storageStatus.value.cache?.path || "-",
+    buttonText: tm("system.cleanup.targets.cache.button"),
+    icon: "mdi-database-refresh-outline",
+    sizeBytes: storageStatus.value.cache?.size_bytes || 0,
   },
   {
-    key: "logs" as const,
+    key: "logs",
     title: tm("system.cleanup.targets.logs.title"),
     subtitle: tm("system.cleanup.targets.logs.subtitle"),
-    buttonText: tm("system.cleanup.targets.logs.button"),
-    icon: "mdi-file-document-outline",
     color: "warning",
-    sizeBytes: storageStatus.value.logs?.size_bytes || 0,
     fileCount: storageStatus.value.logs?.file_count || 0,
     path: storageStatus.value.logs?.path || "-",
+    buttonText: tm("system.cleanup.targets.logs.button"),
+    icon: "mdi-file-document-outline",
+    sizeBytes: storageStatus.value.logs?.size_bytes || 0,
+  },
+  {
+    key: "traces",
+    title: tm("system.cleanup.targets.traces.title"),
+    subtitle: tm("system.cleanup.targets.traces.subtitle"),
+    color: "secondary",
+    fileCount: storageStatus.value.traces?.file_count || 0,
+    path: storageStatus.value.traces?.path || "-",
+    buttonText: tm("system.cleanup.targets.traces.button"),
+    icon: "mdi-database-outline",
+    sizeBytes: storageStatus.value.traces?.size_bytes || 0,
   },
 ]);
 
 const loadStorageStatus = async () => {
   statusLoading.value = true;
   try {
-    const res = await axios.get<StorageResponse<StorageStatus>>("/api/stat/storage");
+    const res = await statsApi.storage();
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("system.cleanup.messages.statusFailed"), "error");
       return;
     }
-    storageStatus.value = res.data.data || storageStatus.value;
+    storageStatus.value = parseStorageStatus(res.data.data || storageStatus.value);
   } catch (error) {
     showToast(resolveErrorMessage(error, tm("system.cleanup.messages.statusFailed")), "error");
   } finally {
@@ -239,28 +279,39 @@ const loadStorageStatus = async () => {
 
 const cleanupStorage = async (target: CleanupTarget) => {
   const confirmed = await askForConfirmation(
-    tm("system.cleanup.confirm", {
-      target: tm(`system.cleanup.targetNames.${target}`),
-    }),
+    ["traces", "all"].includes(target)
+      ? tm("system.cleanup.confirmWithTraces", { target: tm(`system.cleanup.targetNames.${target}`) })
+      : tm("system.cleanup.confirm", { target: tm(`system.cleanup.targetNames.${target}`) }),
     confirmDialog,
   );
   if (!confirmed) return;
 
   cleaningTarget.value = target;
   try {
-    const res = await axios.post<StorageResponse<CleanupResult>>("/api/stat/storage/cleanup", { target });
+    const res = await statsApi.cleanupStorage(target);
     if (res.data.status !== "ok") {
       showToast(res.data.message || tm("system.cleanup.messages.cleanupFailed"), "error");
       return;
     }
 
-    const cleanupData = res.data.data;
-    storageStatus.value = cleanupData?.status || storageStatus.value;
+    const cleanupData = res.data.data || {};
+    storageStatus.value = parseStorageStatus(cleanupData.status || storageStatus.value);
+    const removedBytes = typeof cleanupData.removed_bytes === "number" ? cleanupData.removed_bytes : 0;
+    const removedTraces = typeof cleanupData.removed_traces === "number" ? cleanupData.removed_traces : 0;
+    const processedFiles = typeof cleanupData.processed_files === "number" ? cleanupData.processed_files : 0;
     showToast(
-      tm("system.cleanup.messages.cleanupSuccess", {
-        size: formatBytes(cleanupData?.removed_bytes || 0),
-        count: cleanupData?.processed_files || 0,
-      }),
+      tm(
+        target === "traces"
+          ? "system.cleanup.messages.cleanupTracesSuccess"
+          : removedTraces
+            ? "system.cleanup.messages.cleanupWithTracesSuccess"
+            : "system.cleanup.messages.cleanupSuccess",
+        {
+          size: formatBytes(removedBytes),
+          count: target === "traces" ? removedTraces : processedFiles,
+          traces: removedTraces,
+        },
+      ),
     );
   } catch (error) {
     showToast(resolveErrorMessage(error, tm("system.cleanup.messages.cleanupFailed")), "error");
@@ -280,6 +331,72 @@ onMounted(() => {
 }
 
 .storage-cleanup-panel {
-  margin: 8px 0 12px;
+    margin: 0;
+}
+
+.storage-cleanup-card {
+    overflow: hidden;
+    border: 1px solid var(--settings-border, rgba(17, 24, 39, 0.13));
+    border-radius: var(--astrbot-radius-card);
+    background: rgb(var(--v-theme-surface));
+    box-shadow: none;
+}
+
+.storage-cleanup-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 38%);
+    gap: 18px;
+    align-items: center;
+    min-height: 60px;
+    padding: 12px 16px;
+}
+
+.storage-cleanup-title {
+    color: rgb(var(--v-theme-on-surface));
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.4;
+}
+
+.storage-cleanup-hint {
+    margin-top: 4px;
+    color: rgba(var(--v-theme-on-surface), 0.76);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.storage-cleanup-control {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    justify-self: end;
+}
+
+.storage-cleanup-control :deep(.v-btn),
+.storage-cleanup-control :deep(.v-chip) {
+    border-radius: var(--astrbot-radius-control);
+}
+
+.storage-cleanup-chip,
+.storage-cleanup-action {
+    background: rgba(var(--v-theme-on-surface), 0.06) !important;
+    color: rgba(var(--v-theme-on-surface), 0.72) !important;
+}
+
+@media (max-width: 720px) {
+    .storage-cleanup-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        padding: 14px 16px;
+    }
+
+    .storage-cleanup-control {
+        justify-content: flex-start;
+        justify-self: stretch;
+    }
 }
 </style>

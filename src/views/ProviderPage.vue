@@ -1,12 +1,8 @@
 <template>
-  <div class="provider-page">
+  <div class="provider-page" :class="{ 'provider-page--embedded': embedded }">
     <v-container fluid class="pa-0">
-      <div class="provider-tabs-scroll">
-        <div
-          class="provider-tabs"
-          role="tablist"
-          :aria-label="tm('providerTypes.title')"
-        >
+      <div v-if="!embedded" class="provider-tabs-scroll">
+        <div class="provider-tabs" role="tablist" :aria-label="tm('providerTypes.title')">
           <button
             v-for="type in providerTypes"
             :key="type.value"
@@ -63,164 +59,189 @@
 
           <div class="provider-workbench__main">
             <template v-if="selectedProviderType === 'chat_completion'">
-            <div v-if="selectedProviderSource" class="provider-config-shell">
-              <div class="provider-config-header">
-                <div class="provider-config-headline">
-                  <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
-                  <ProviderSourceSubtitle
-                    class="provider-config-subtitle"
-                    :api-base="selectedProviderSource.api_base"
-                    :sponsor="selectedSponsor"
-                    :tm="tm"
-                  />
-                </div>
-
-                <div class="provider-config-actions">
-                  <v-btn
-                    color="primary"
-                    prepend-icon="mdi-content-save-outline"
-                    :loading="savingSource"
-                    :disabled="!isSourceModified"
-                    variant="tonal"
-                    rounded="xl"
-                    @click="saveProviderSource"
-                  >
-                    {{ tm('providerSources.save') }}
-                  </v-btn>
-                </div>
-              </div>
-
-              <v-divider></v-divider>
-
-              <div class="provider-config-body">
-                <section class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+              <div v-if="selectedProviderSource" class="provider-config-shell">
+                <div class="provider-config-header">
+                  <div class="provider-config-headline">
+                    <div class="provider-config-title">{{ selectedProviderSource.id }}</div>
+                    <ProviderSourceSubtitle
+                      class="provider-config-subtitle"
+                      :api-base="selectedProviderSource.api_base"
+                      :sponsor="selectedSponsor"
+                      :tm="tm"
+                    />
                   </div>
-                  <AstrBotConfig
-                    v-if="basicSourceConfig"
-                    :iterable="basicSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
 
-                <v-divider v-if="advancedSourceConfig"></v-divider>
-
-                <section v-if="advancedSourceConfig" class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providerSources.advancedConfig') }}</div>
+                  <div class="provider-config-actions">
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-content-save-outline"
+                      :loading="savingSource"
+                      :disabled="!isSourceModified"
+                      variant="tonal"
+                      rounded="xl"
+                      @click="saveProviderSource"
+                    >
+                      {{ tm('providerSources.save') }}
+                    </v-btn>
                   </div>
-                  <AstrBotConfig
-                    :iterable="advancedSourceConfig"
-                    :metadata="providerSourceSchema"
-                    metadataKey="provider"
-                    :is-editing="true"
-                  />
-                </section>
+                </div>
 
                 <v-divider></v-divider>
 
-                <section class="provider-section provider-section--models">
-                  <ProviderModelsPanel
-                    :entries="filteredMergedModelEntries"
-                    :available-count="availableModels.length"
-                    v-model:model-search="modelSearch"
-                    :loading-models="loadingModels"
-                    :is-source-modified="isSourceModified"
-                    :supports-image-input="supportsImageInput"
-                    :supports-audio-input="supportsAudioInput"
-                    :supports-tool-call="supportsToolCall"
-                    :supports-reasoning="supportsReasoning"
-                    :format-context-limit="formatContextLimit"
-                    :testing-providers="testingProviders"
-                    :saving-providers="savingProviderToggles"
-                    :tm="tm"
-                    @fetch-models="fetchAvailableModels"
-                    @open-manual-model="openManualModelDialog"
-                    @open-provider-edit="openProviderEdit"
-                    @toggle-provider-enable="toggleProviderEnable"
-                    @test-provider="testProvider"
-                    @delete-provider="deleteProvider"
-                    @add-model-provider="openModelAddDialog"
-                  />
-                </section>
-              </div>
-            </div>
+                <div class="provider-config-body">
+                  <section class="provider-section config-form astrbot-config-form">
+                    <div class="provider-section-head">
+                      <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                    </div>
+                    <AstrBotConfig
+                      v-if="basicSourceConfig"
+                      :iterable="basicSourceConfig"
+                      :metadata="providerSourceSchema"
+                      metadataKey="provider"
+                      :is-editing="true"
+                    />
+                  </section>
 
-            <div v-else class="provider-empty-state">
-              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-              <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
-            </div>
+                  <v-divider v-if="advancedSourceConfig"></v-divider>
+
+                  <details
+                    v-if="advancedSourceConfig"
+                    :key="selectedProviderSource.id"
+                    class="provider-section provider-section--advanced config-form astrbot-config-form"
+                  >
+                    <summary class="provider-section-head provider-section-title">
+                      {{ tm('providerSources.advancedConfig') }}
+                      <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                    </summary>
+                    <div class="provider-section-content">
+                      <AstrBotConfig
+                        :iterable="advancedSourceConfig"
+                        :metadata="providerSourceSchema"
+                        metadataKey="provider"
+                        :is-editing="true"
+                      />
+                    </div>
+                  </details>
+
+                  <v-divider></v-divider>
+
+                  <section class="provider-section provider-section--models">
+                    <ProviderModelsPanel
+                      :entries="filteredMergedModelEntries"
+                      :available-count="availableModels.length"
+                      v-model:model-search="modelSearch"
+                      :loading-models="loadingModels"
+                      :is-source-modified="isSourceModified"
+                      :supports-image-input="supportsImageInput"
+                      :supports-audio-input="supportsAudioInput"
+                      :supports-tool-call="supportsToolCall"
+                      :supports-reasoning="supportsReasoning"
+                      :format-context-limit="formatContextLimit"
+                      :testing-providers="testingProviders"
+                      :tm="tm"
+                      @fetch-models="fetchAvailableModels"
+                      @open-manual-model="openManualModelDialog"
+                      @open-provider-edit="openProviderEdit"
+                      @toggle-provider-enable="toggleProviderEnable"
+                      @test-provider="testProvider"
+                      @delete-provider="deleteProvider"
+                      @add-model-provider="openModelAddDialog"
+                    />
+                  </section>
+                </div>
+              </div>
+
+              <div v-else class="provider-empty-state">
+                <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
+                <p class="mt-2">{{ tm('providerSources.selectHint') }}</p>
+              </div>
             </template>
 
             <template v-else>
-            <div v-if="selectedLegacyProvider" class="provider-config-shell">
-              <div class="provider-config-header">
-                <div class="provider-config-headline">
-                  <div class="provider-config-title">
-                    {{ newSelectedProviderConfig.id || selectedLegacyProvider.id }}
-                  </div>
-                  <div class="provider-config-subtitle">
-                    {{
-                      newSelectedProviderConfig.api_base ||
+              <div v-if="selectedLegacyProvider" class="provider-config-shell">
+                <div class="provider-config-header">
+                  <div class="provider-config-headline">
+                    <div class="provider-config-title">
+                      {{ newSelectedProviderConfig.id || selectedLegacyProvider.id }}
+                    </div>
+                    <div class="provider-config-subtitle">
+                      {{ newSelectedProviderConfig.api_base ||
                       newSelectedProviderConfig.embedding_api_base ||
                       newSelectedProviderConfig.rerank_api_base ||
                       newSelectedProviderConfig.type ||
-                      'N/A'
-                    }}
+                      'N/A' }}
+                    </div>
+                  </div>
+
+                  <div class="provider-config-actions d-flex align-center ga-2">
+                    <v-btn
+                      v-if="updatingMode"
+                      color="primary"
+                      prepend-icon="mdi-connection"
+                      :loading="isProviderTesting(selectedLegacyProvider.id)"
+                      :disabled="selectedLegacyProvider.enable === false"
+                      variant="text"
+                      rounded="xl"
+                      @click="testSingleProvider(selectedLegacyProvider)"
+                    >
+                      {{ tm('availability.test') }}
+                    </v-btn>
+                    <v-btn
+                      color="primary"
+                      prepend-icon="mdi-content-save-outline"
+                      :loading="loading"
+                      :disabled="!isLegacyProviderModified"
+                      variant="tonal"
+                      rounded="xl"
+                      @click="saveLegacyProvider"
+                    >
+                      {{ tm('dialogs.config.save') }}
+                    </v-btn>
                   </div>
                 </div>
 
-                <div class="provider-config-actions d-flex align-center ga-2">
-                  <v-btn
-                    v-if="updatingMode"
-                    color="primary"
-                    prepend-icon="mdi-connection"
-                    :loading="isProviderTesting(selectedLegacyProvider.id)"
-                    :disabled="selectedLegacyProvider.enable === false"
-                    variant="text"
-                    rounded="xl"
-                    @click="testSingleProvider(selectedLegacyProvider)"
+                <v-divider></v-divider>
+
+                <div class="provider-config-body">
+                  <section class="provider-section config-form astrbot-config-form">
+                    <div class="provider-section-head">
+                      <div class="provider-section-title">{{ tm('providers.settings') }}</div>
+                    </div>
+                    <AstrBotConfig
+                      :iterable="legacyConfigSections.basic"
+                      :metadata="legacyConfigSchema"
+                      metadataKey="provider"
+                      :is-editing="updatingMode"
+                    />
+                  </section>
+
+                  <v-divider v-if="legacyConfigSections.advanced"></v-divider>
+
+                  <details
+                    v-if="legacyConfigSections.advanced"
+                    :key="selectedLegacyProvider.id"
+                    class="provider-section provider-section--advanced config-form astrbot-config-form"
                   >
-                    {{ tm('availability.test') }}
-                  </v-btn>
-                  <v-btn
-                    color="primary"
-                    prepend-icon="mdi-content-save-outline"
-                    :loading="loading"
-                    :disabled="!isLegacyProviderModified"
-                    variant="tonal"
-                    rounded="xl"
-                    @click="saveLegacyProvider"
-                  >
-                    {{ tm('dialogs.config.save') }}
-                  </v-btn>
+                    <summary class="provider-section-head provider-section-title">
+                      {{ tm('providerSources.advancedConfig') }}
+                      <v-icon class="provider-section-chevron" size="20">mdi-chevron-right</v-icon>
+                    </summary>
+                    <div class="provider-section-content">
+                      <AstrBotConfig
+                        :iterable="legacyConfigSections.advanced"
+                        :metadata="legacyConfigSchema"
+                        metadataKey="provider"
+                        :is-editing="updatingMode"
+                      />
+                    </div>
+                  </details>
                 </div>
               </div>
 
-              <v-divider></v-divider>
-
-              <div class="provider-config-body">
-                <section class="provider-section">
-                  <div class="provider-section-head">
-                    <div class="provider-section-title">{{ tm('providers.settings') }}</div>
-                  </div>
-                  <AstrBotConfig
-                    :iterable="newSelectedProviderConfig"
-                    :metadata="configSchema"
-                    metadataKey="provider"
-                    :is-editing="updatingMode"
-                  />
-                </section>
+              <div v-else class="provider-empty-state">
+                <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
+                <p class="mt-2">{{ tm('providers.selectHint') }}</p>
               </div>
-            </div>
-
-            <div v-else class="provider-empty-state">
-              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
-              <p class="mt-2">{{ tm('providers.selectHint') }}</p>
-            </div>
             </template>
           </div>
         </div>
@@ -229,9 +250,7 @@
 
     <v-dialog v-model="showManualModelDialog" max-width="400">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          {{ tm('models.manualDialogTitle') }}
-        </v-card-title>
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6"> {{ tm('models.manualDialogTitle') }} </v-card-title>
         <v-card-text class="py-4">
           <v-text-field
             v-model="manualModelId"
@@ -260,10 +279,8 @@
 
     <v-dialog v-model="showProviderEditDialog" width="800">
       <v-card>
-        <v-card-title class="text-h3 pa-4 pb-0 pl-6">
-          {{ providerEditDialogTitle }}
-        </v-card-title>
-        <v-card-text class="py-4">
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6"> {{ providerEditDialogTitle }} </v-card-title>
+        <v-card-text class="py-4 config-form astrbot-config-form">
           <AstrBotConfig
             v-if="providerEditData"
             :iterable="providerEditData"
@@ -296,7 +313,6 @@
     <v-snackbar v-model="snackbar.show" :color="snackbar.color" :timeout="3000" location="top">
       {{ snackbar.message }}
     </v-snackbar>
-
   </div>
 </template>
 
@@ -312,6 +328,7 @@ import { useProviderSources } from "@/composables/useProviderSources";
 import { useModuleI18n } from "@/i18n/composables";
 
 const props = defineProps({
+  embedded: { type: Boolean, default: false },
   defaultTab: {
     type: String,
     default: "chat_completion",
@@ -339,7 +356,6 @@ const {
   loadingSources,
   loadingModels,
   savingSource,
-  savingProviderToggles,
   testingProviders,
   isSourceModified,
   configSchema,
@@ -380,6 +396,47 @@ const {
   showMessage,
 });
 
+const decisionHintKeys = {
+  system_one_decision: "decisionHints",
+  openai_decision: "openaiDecisionHints",
+};
+
+const legacyConfigSchema = computed(() => {
+  const schema = JSON.parse(JSON.stringify(configSchema.value || {}));
+  const providerType = selectedLegacyProvider.value?.type;
+  const hintKey = decisionHintKeys[providerType];
+  if (!hintKey && !["deepseek_tts_api", "deepseek_stt_api"].includes(providerType)) return schema;
+
+  const items = schema.provider?.items;
+  if (!items) return schema;
+  if (hintKey) {
+    if (items.key) {
+      items.key.type = "string";
+      delete items.key.items;
+    }
+    // The schema only shows these fields for System One; every decision type uses them.
+    for (const field of ["total_timeout", "max_concurrency"]) {
+      if (items[field]) delete items[field].condition;
+    }
+    if (items.api_base) items.api_base.hint = tm(`providers.${hintKey}.apiBase`);
+    if (items.model && providerType === "openai_decision") {
+      items.model.hint = tm("providers.openaiDecisionHints.model");
+    } else if (items.model) {
+      items.model.hint = tm("providers.decisionHints.model");
+    }
+    if (items.custom_headers) {
+      items.custom_headers.hint = tm("providers.decisionHints.customHeaders");
+    }
+  }
+  if (providerType === "deepseek_tts_api" && items.api_base) {
+    items.api_base.hint = tm("providers.deepseekTtsHints.apiBase");
+  }
+  if (providerType === "deepseek_stt_api" && items.api_base) {
+    items.api_base.hint = tm("providers.deepseekSttHints.apiBase");
+  }
+  return schema;
+});
+
 const unsavedLegacyProviderMarker = Symbol("unsavedLegacyProvider");
 const legacyProviderDrafts = ref([]);
 const selectedLegacyProvider = ref(null);
@@ -388,6 +445,28 @@ const newProviderOriginalId = ref("");
 const updatingMode = ref(false);
 const loading = ref(false);
 const isLegacyProviderModified = ref(false);
+const legacyConfigSections = computed(() => {
+  const config = newSelectedProviderConfig.value;
+  if (!decisionHintKeys[config.type]) return { basic: config, advanced: null };
+
+  const advancedFields = new Set(["timeout", "total_timeout", "max_concurrency", "proxy", "custom_headers"]);
+  const basic = {};
+  const advanced = {};
+  for (const key of Object.keys(config)) {
+    const property = {
+      get() {
+        return config[key];
+      },
+      set(value) {
+        config[key] = value;
+      },
+    };
+    // Keep hidden fields accessible to schema conditions in both sections.
+    Object.defineProperty(basic, key, { ...property, enumerable: !advancedFields.has(key) });
+    Object.defineProperty(advanced, key, { ...property, enumerable: advancedFields.has(key) });
+  }
+  return { basic, advanced };
+});
 const showManualModelDialog = ref(false);
 let suppressLegacyProviderWatch = false;
 
@@ -524,7 +603,7 @@ function selectLegacyProvider(provider) {
   const mergeConfigWithOrder = (target, source, reference) => {
     if (source && typeof source === "object" && !Array.isArray(source)) {
       for (const key in source) {
-        if (Object.hasOwn(source, key)) {
+        if (Object.prototype.hasOwnProperty.call(source, key)) {
           if (typeof source[key] === "object" && source[key] !== null) {
             target[key] = Array.isArray(source[key]) ? [...source[key]] : { ...source[key] };
           } else {
@@ -554,6 +633,9 @@ function selectLegacyProvider(provider) {
 
   if (defaultConfig) {
     mergeConfigWithOrder(newSelectedProviderConfig.value, provider, defaultConfig);
+  }
+  if (provider.type === "system_one_decision") {
+    delete newSelectedProviderConfig.value.probability_tolerance;
   }
 
   updatingMode.value = !provider[unsavedLegacyProviderMarker];
@@ -655,6 +737,16 @@ async function testSingleProvider(provider) {
   min-height: 0;
 }
 
+.provider-page--embedded .provider-content {
+  max-width: none;
+  padding: 0;
+}
+
+.provider-page--embedded .provider-workbench {
+  border: 0;
+  border-radius: 0;
+}
+
 .provider-tabs-scroll {
   flex: 0 0 auto;
   overflow-x: auto;
@@ -677,7 +769,7 @@ async function testSingleProvider(provider) {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   color: rgba(var(--v-theme-on-surface), 0.58);
   cursor: pointer;
   display: inline-flex;
@@ -706,6 +798,7 @@ async function testSingleProvider(provider) {
 }
 
 .provider-content {
+  container: provider-workbench / inline-size;
   display: flex;
   flex: 1;
   margin: 0 auto;
@@ -717,7 +810,7 @@ async function testSingleProvider(provider) {
 
 .provider-workbench {
   border: 1px solid var(--provider-border);
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   background: var(--provider-surface);
   display: grid;
   flex: 1;
@@ -740,19 +833,22 @@ async function testSingleProvider(provider) {
 
 .provider-workbench__main {
   display: flex;
+  overflow: auto;
 }
 
 .provider-config-shell {
+  container: provider-config / inline-size;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .provider-config-header {
   background: var(--provider-surface);
   display: flex;
+  flex-wrap: wrap;
   flex: 0 0 auto;
   justify-content: space-between;
   align-items: flex-start;
@@ -794,7 +890,7 @@ async function testSingleProvider(provider) {
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  overflow-y: auto;
+  overflow: auto;
   scrollbar-gutter: stable;
 }
 
@@ -821,6 +917,31 @@ async function testSingleProvider(provider) {
   line-height: 1.4;
 }
 
+.provider-section--advanced > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.provider-section--advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.provider-section--advanced:not([open]) > summary {
+  margin-bottom: 0;
+}
+
+.provider-section--advanced[open] .provider-section-chevron {
+  transform: rotate(90deg);
+}
+
+.provider-section-content {
+  /* Restore Vuetify's inherited box sizing across the native details content boundary. */
+  box-sizing: border-box;
+}
+
 .provider-empty-state {
   flex: 1;
   min-height: 420px;
@@ -831,9 +952,9 @@ async function testSingleProvider(provider) {
   color: rgba(var(--v-theme-on-surface), 0.56);
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-workbench {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto 1px minmax(0, 1fr);
   }
 
@@ -867,10 +988,6 @@ async function testSingleProvider(provider) {
     padding-inline: 4px;
   }
 
-  .provider-workbench {
-    border-radius: 12px;
-  }
-
   .provider-tab {
     padding-inline: 11px;
   }
@@ -884,4 +1001,8 @@ async function testSingleProvider(provider) {
     padding: 24px;
   }
 }
+</style>
+
+<style>
+@import "@/styles/config-form.css";
 </style>

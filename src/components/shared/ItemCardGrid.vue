@@ -98,16 +98,14 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
 import { useI18n } from "@/i18n/composables";
+import { isRecord } from "@/utils/typeGuards";
 
-type CardItem = Record<string, unknown>;
-
-export default defineComponent({
+export default {
   name: "ItemCardGrid",
   props: {
     items: {
-      type: Array as PropType<CardItem[]>,
+      type: Array,
       required: true,
     },
     titleField: {
@@ -142,18 +140,18 @@ export default defineComponent({
     },
   },
   methods: {
-    getItemTitle(item: CardItem): string {
-      const title = item[this.titleField];
-      return title == null ? "" : String(title);
+    getItemTitle(item: unknown) {
+      const value = isRecord(item) ? item[this.titleField] : undefined;
+      return value == null ? undefined : String(value);
     },
-    getItemEnabled(item: CardItem): boolean {
-      return Boolean(item[this.enabledField]);
+    getItemEnabled(item: unknown) {
+      return isRecord(item) ? item[this.enabledField] : undefined;
     },
-    toggleEnabled(item: CardItem) {
+    toggleEnabled(item: unknown) {
       this.$emit("toggle-enabled", item);
     },
   },
-});
+};
 </script>
 
 <style>

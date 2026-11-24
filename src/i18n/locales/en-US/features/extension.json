@@ -47,7 +47,7 @@
     "viewRepo": "Repository",
     "openPages": "Pages",
     "openPage": "Open",
-    "openWebui": "Open Plugin UI",
+    "openView": "Open View",
     "close": "Close",
     "save": "Save",
     "saveAndClose": "Save and Close",
@@ -73,7 +73,8 @@
     "installed": "Installed",
     "preset": "Preset",
     "unknown": "Unknown",
-    "unsupported": "Unsupported"
+    "unsupported": "Unsupported",
+    "incompatible": "Incompatible"
   },
   "tooltips": {
     "enable": "Click to Enable",
@@ -155,7 +156,7 @@
     },
     "showFullName": "Full Name",
     "devDocs": "Extension Development Docs",
-    "submitRepo": "Submit Extension Repository",
+    "submitRepo": "Submit My Extension",
     "customSource": "Custom Extension Source",
     "source": "Source",
     "availableSources": "Available Sources",
@@ -305,14 +306,16 @@
     "invalidRepositoryUrl": "Please enter a valid Git repository URL",
     "enterJsonUrl": "Please enter a URL that returns plugin list JSON data",
     "pluginNotFound": "Plugin not found",
-    "pluginDisabled": "This plugin is closed. Open it before accessing its page.",
-    "pluginPageNotFound": "Plugin view not found",
-    "pluginPageLoadFailed": "Failed to load the plugin view",
+    "pluginDisabled": "This plugin is closed. Open it before accessing its view.",
+    "pluginViewNotFound": "Plugin view not found",
+    "pluginViewLoadFailed": "Failed to load the plugin view",
     "missingMarketPluginId": "This source record is missing legal plugin identifiers, so it cannot be installed from the market",
     "sourceBindSuccess": "Plugin source updated",
     "validatingPlugin": "Validating plugin...",
     "pluginValidateSuccess": "Plugin validation passed",
-    "pluginValidateFailed": "Plugin validation failed"
+    "pluginValidateFailed": "Plugin validation failed",
+    "pluginPageNotFound": "Plugin page not found",
+    "pluginPageLoadFailed": "Failed to load plugin page"
   },
   "upload": {
     "fromFile": "Install from File",

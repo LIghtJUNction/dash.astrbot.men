@@ -3,21 +3,15 @@
  */
 import { computed, type Ref, ref } from "vue";
 import { toolApi } from "@/api/v1";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import { normalizeTextInput } from "@/utils/inputValue";
 import type { ToolItem, ToolSummary } from "../types";
 
 export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, color?: string) => void) {
   const toolSearch = ref("");
-  const showBuiltinTools = ref(true);
+  const pluginTools = computed(() => tools.value.filter((tool) => tool.origin === "plugin"));
 
   const filteredTools = computed(() => {
-    let result = tools.value;
-
-    // Filter builtin tools
-    if (!showBuiltinTools.value) {
-      result = result.filter((tool) => tool.origin !== "builtin");
-    }
+    let result = pluginTools.value;
 
     // Filter by search query
     const query = normalizeTextInput(toolSearch.value).trim().toLowerCase();
@@ -31,7 +25,7 @@ export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, 
   });
 
   const toolSummary = computed<ToolSummary>(() => {
-    const all = tools.value;
+    const all = pluginTools.value;
     return {
       total: all.length,
       active: all.filter((t) => t.active).length,
@@ -42,24 +36,21 @@ export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, 
   /**
    * Toggle a tool's active state (optimistic update).
    */
-  const toggleTool = async (tool: ToolItem, readonlyMessage: string, successMessage: string, errorMessage: string) => {
-    if (tool.readonly) {
-      toast(readonlyMessage, "info");
-      return;
-    }
+  const toggleTool = async (tool: ToolItem, successMessage: string, errorMessage: string) => {
+    if (tool.source === "internal") return;
     const previous = tool.active;
     tool.active = !tool.active;
     try {
-      const res = await toolApi.setEnabled(tool.name, tool.active);
+      const res = await toolApi.setEnabled(tool.tool_key || tool.name, tool.active);
       if (res.data.status === "ok") {
         toast(res.data.message || successMessage);
       } else {
         tool.active = previous;
         toast(res.data.message || errorMessage, "error");
       }
-    } catch (error: unknown) {
+    } catch (error: any) {
       tool.active = previous;
-      toast(resolveErrorMessage(error, errorMessage), "error");
+      toast(error?.response?.data?.message || error?.message || errorMessage, "error");
     }
   };
 
@@ -70,15 +61,11 @@ export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, 
     tool: ToolItem,
     permission: "admin" | "member",
     successMessage: string,
-    builtinMessage: string,
     errorMessage: string,
   ) => {
-    if (tool.origin === "builtin") {
-      toast(builtinMessage, "info");
-      return;
-    }
+    if (tool.source === "internal") return;
     try {
-      const res = await toolApi.setPermission(tool.name, permission);
+      const res = await toolApi.setPermission(tool.tool_key || tool.name, permission);
       if (res.data.status === "ok") {
         tool.permission = permission;
         tool.permission_configured = true;
@@ -86,14 +73,13 @@ export function useToolActions(tools: Ref<ToolItem[]>, toast: (message: string, 
       } else {
         toast(res.data.message || errorMessage, "error");
       }
-    } catch (error: unknown) {
-      toast(resolveErrorMessage(error, errorMessage), "error");
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error?.message || errorMessage, "error");
     }
   };
 
   return {
     toolSearch,
-    showBuiltinTools,
     filteredTools,
     toolSummary,
     toggleTool,

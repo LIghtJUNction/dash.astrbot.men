@@ -154,32 +154,31 @@
 import { computed, ref, watch } from "vue";
 import type { ApiEnvelope } from "@/api/v1";
 import { useI18n } from "@/i18n/composables";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
+import { resolveErrorMessage } from "@/utils/errorUtils";
 import axios from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import ConsoleDisplayer from "./ConsoleDisplayer.vue";
 import WaitingForRestart from "./WaitingForRestart.vue";
 
-const { t } = useI18n();
-
-interface Platform {
+interface MigrationPlatform {
   id: string;
+  name?: string;
   type: string;
   platform_type?: string;
-  name?: string;
 }
 
-interface PlatformGroup {
+interface MigrationPlatformGroup {
   type: string;
-  platforms: Platform[];
+  platforms: MigrationPlatform[];
 }
 
 interface MigrationResult {
   success: boolean;
-  message: string;
+  message?: string;
+  cancelled?: boolean;
 }
 
-type MigrationOutcome = MigrationResult | { success: false; cancelled: true } | null;
+const { t } = useI18n();
 
 const isOpen = ref(false);
 const loading = ref(false);
@@ -187,15 +186,15 @@ const error = ref("");
 const migrating = ref(false);
 const migrationCompleted = ref(false);
 const migrationResult = ref<MigrationResult | null>(null);
-const platforms = ref<Platform[]>([]);
-const selectedPlatforms = ref<Record<string, string | null | undefined>>({});
+const platforms = ref<MigrationPlatform[]>([]);
+const selectedPlatforms = ref<Record<string, string | null>>({});
 const wfr = ref<Parameters<typeof restartAstrBotRuntime>[0]>(null);
 
-let resolvePromise: ((result: MigrationOutcome) => void) | null = null;
+let resolvePromise: ((result: MigrationResult | null) => void) | null = null;
 
 // 计算属性：将平台按类型分组
 const platformGroups = computed(() => {
-  const groups: Record<string, PlatformGroup> = {};
+  const groups: Record<string, MigrationPlatformGroup> = {};
   platforms.value.forEach((platform) => {
     const type = platform.platform_type || platform.type;
     if (!groups[type]) {
@@ -235,7 +234,7 @@ const loadPlatforms = async () => {
   error.value = "";
 
   try {
-    const response = await axios.get<ApiEnvelope<{ platforms?: Platform[] }>>("/api/config/platform/list");
+    const response = await axios.get<ApiEnvelope<{ platforms?: MigrationPlatform[] }>>("/api/config/platform/list");
     if (response.data.status === "ok") {
       platforms.value = response.data.data.platforms || [];
 
@@ -250,7 +249,7 @@ const loadPlatforms = async () => {
     }
   } catch (err) {
     console.error("Failed to load platforms:", err);
-    error.value = resolveErrorMessage(err, t("features.migration.dialog.loadError"));
+    error.value = t("features.migration.dialog.loadError");
   } finally {
     loading.value = false;
   }
@@ -259,7 +258,6 @@ const loadPlatforms = async () => {
 // 执行迁移
 const handleMigration = async () => {
   migrating.value = true;
-  error.value = "";
 
   try {
     // 构建 platform_id_map
@@ -315,7 +313,7 @@ const handleClose = () => {
 };
 
 // 获取平台显示标签
-const getPlatformLabel = (platform: Platform) => {
+const getPlatformLabel = (platform: MigrationPlatform) => {
   const name = platform.name || platform.id || "Unknown";
   return `${name}`;
 };
@@ -330,10 +328,10 @@ const restartAstrBot = async () => {
 };
 
 // 打开对话框的方法
-const open = () => {
+const open = (): Promise<MigrationResult | null> => {
   isOpen.value = true;
 
-  return new Promise<MigrationOutcome>((resolve) => {
+  return new Promise<MigrationResult | null>((resolve) => {
     resolvePromise = resolve;
   });
 };

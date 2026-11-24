@@ -200,7 +200,7 @@ function openManager() {
   width: min(360px, calc(100vw - 24px));
   overflow: hidden;
   border: 1px solid rgba(var(--v-theme-on-surface), 0.09) !important;
-  border-radius: 14px !important;
+  border-radius: var(--astrbot-radius-menu) !important;
   background: rgb(var(--v-theme-surface));
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07) !important;
 }
@@ -219,7 +219,7 @@ function openManager() {
 }
 
 .config-profile-menu__search :deep(.v-field) {
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   box-shadow: none;
 }
 
@@ -236,7 +236,7 @@ function openManager() {
 .config-profile-menu__item {
   min-height: 42px !important;
   margin-bottom: 2px;
-  border-radius: 10px !important;
+  border-radius: var(--astrbot-radius-control) !important;
 }
 
 .config-profile-menu__item:hover {
@@ -278,7 +278,7 @@ function openManager() {
   min-height: 40px;
   padding: 8px 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
   color: rgba(var(--v-theme-on-surface), 0.72);
   cursor: pointer;

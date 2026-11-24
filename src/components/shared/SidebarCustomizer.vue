@@ -12,9 +12,7 @@
 
     <v-dialog v-model="dialog" max-width="700px">
       <v-card>
-        <v-card-title
-          class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center"
-        >
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex justify-space-between align-center">
           <span>{{ t("features.settings.sidebar.customize.title") }}</span>
           <v-btn icon="mdi-close" variant="text" @click="dialog = false" />
         </v-card-title>
@@ -44,19 +42,8 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'main', index)"
                 >
-                  <template v-slot:prepend>
-                    <v-icon
-                      v-if="typeof item.icon === 'string'"
-                      :icon="item.icon"
-                      size="small"
-                      class="mr-2"
-                    />
-                    <component
-                      :is="item.icon"
-                      v-else-if="item.icon"
-                      :size="18"
-                      class="mr-2"
-                    />
+                  <template #prepend>
+                    <v-icon :icon="item.icon" size="small" class="mr-2" />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -90,19 +77,8 @@
                   @dragover.prevent
                   @drop.stop="handleDrop($event, 'more', index)"
                 >
-                  <template v-slot:prepend>
-                    <v-icon
-                      v-if="typeof item.icon === 'string'"
-                      :icon="item.icon"
-                      size="small"
-                      class="mr-2"
-                    />
-                    <component
-                      :is="item.icon"
-                      v-else-if="item.icon"
-                      :size="18"
-                      class="mr-2"
-                    />
+                  <template #prepend>
+                    <v-icon :icon="item.icon" size="small" class="mr-2" />
                   </template>
                   <v-list-item-title>{{ t(item.title) }}</v-list-item-title>
                   <template #append>
@@ -136,7 +112,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "@/i18n/composables";
-import sidebarItems, { type menu } from "@/layouts/full/vertical-sidebar/sidebarItem";
+import sidebarItems from "@/layouts/full/vertical-sidebar/sidebarItem";
 import {
   clearSidebarCustomization,
   getSidebarCustomization,
@@ -146,25 +122,24 @@ import {
 
 const { t } = useI18n();
 
-const dialog = ref(false);
-type SidebarItem = menu & { title: string };
+type SidebarEntry = (typeof sidebarItems)[number] & { title: string };
 type SidebarList = "main" | "more";
-type DraggedItem = {
+interface DraggedSidebarEntry {
   type: SidebarList;
   index: number;
-  item: SidebarItem;
-};
+  item: SidebarEntry;
+}
 
-const mainItems = ref<SidebarItem[]>([]);
-const moreItems = ref<SidebarItem[]>([]);
-const draggedItem = ref<DraggedItem | null>(null);
+const dialog = ref(false);
+const mainItems = ref<SidebarEntry[]>([]);
+const moreItems = ref<SidebarEntry[]>([]);
+const draggedItem = ref<DraggedSidebarEntry | null>(null);
 
 function initializeItems() {
   const customization = getSidebarCustomization();
   const { mainItems: resolvedMain, moreItems: resolvedMore } = resolveSidebarItems(sidebarItems, customization);
-  const hasTitle = (item: menu): item is SidebarItem => typeof item.title === "string";
-  mainItems.value = resolvedMain.filter(hasTitle);
-  moreItems.value = resolvedMore.filter(hasTitle);
+  mainItems.value = resolvedMain;
+  moreItems.value = resolvedMore;
 }
 
 function openDialog() {
@@ -172,40 +147,75 @@ function openDialog() {
   dialog.value = true;
 }
 
-function getList(listType: SidebarList) {
-  return listType === "main" ? mainItems.value : moreItems.value;
-}
-
 function handleDragStart(event: DragEvent, listType: SidebarList, index: number) {
-  const item = getList(listType)[index];
-  if (!item) return;
-  draggedItem.value = { type: listType, index, item };
+  draggedItem.value = {
+    type: listType,
+    index: index,
+    item: listType === "main" ? mainItems.value[index] : moreItems.value[index],
+  };
   if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
 }
 
-function handleDrop(event: DragEvent, targetListType: SidebarList, targetIndex?: number) {
+function handleDrop(event: DragEvent, targetListType: SidebarList, targetIndex: number) {
   event.preventDefault();
+
   if (!draggedItem.value) return;
 
-  const { type, index, item } = draggedItem.value;
-  getList(type).splice(index, 1);
-  const targetList = getList(targetListType);
-  targetList.splice(targetIndex ?? targetList.length, 0, item);
+  const sourceListType = draggedItem.value.type;
+  const sourceIndex = draggedItem.value.index;
+  const item = draggedItem.value.item;
+
+  // Remove from source
+  if (sourceListType === "main") {
+    mainItems.value.splice(sourceIndex, 1);
+  } else {
+    moreItems.value.splice(sourceIndex, 1);
+  }
+
+  // Add to target
+  if (targetListType === "main") {
+    mainItems.value.splice(targetIndex, 0, item);
+  } else {
+    moreItems.value.splice(targetIndex, 0, item);
+  }
+
   draggedItem.value = null;
 }
 
 function handleDropToList(event: DragEvent, targetListType: SidebarList) {
-  handleDrop(event, targetListType);
+  event.preventDefault();
+
+  if (!draggedItem.value) return;
+
+  const sourceListType = draggedItem.value.type;
+  const sourceIndex = draggedItem.value.index;
+  const item = draggedItem.value.item;
+
+  // Remove from source
+  if (sourceListType === "main") {
+    mainItems.value.splice(sourceIndex, 1);
+  } else {
+    moreItems.value.splice(sourceIndex, 1);
+  }
+
+  // Add to target list at the end
+  if (targetListType === "main") {
+    mainItems.value.push(item);
+  } else {
+    moreItems.value.push(item);
+  }
+
+  draggedItem.value = null;
 }
 
 function moveToMore(index: number) {
   const item = mainItems.value.splice(index, 1)[0];
-  if (item) moreItems.value.push(item);
+  moreItems.value.push(item);
 }
 
 function moveToMain(index: number) {
   const item = moreItems.value.splice(index, 1)[0];
-  if (item) mainItems.value.push(item);
+  mainItems.value.push(item);
 }
 
 function saveCustomization() {

@@ -1,118 +1,95 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { beforeEach, test, vi } from "vitest";
+import { SPONSOR_CACHE_TTL } from "../src/utils/sponsorCatalogSchema.mjs";
 import builtIns from "./fixtures/sponsorCatalog.mjs";
 
 const defaults = structuredClone(builtIns);
 defaults.sponsors[0].website_url = "https://example.com/";
 defaults.sponsors[0].help_url = "https://docs.example.com/start#key";
-
-import { SPONSOR_CACHE_TTL } from "../src/utils/sponsorCatalogSchema.mjs";
-
-test("dashboard six-hour cache", async (t) => {
-  const now = Date.now();
-  let cached = null;
-  let fetched = 0;
-  t.mock.method(Date, "now", () => now);
-  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
-  t.after(() => {
-    if (originalStorage) Object.defineProperty(globalThis, "localStorage", originalStorage);
-    else delete globalThis.localStorage;
-  });
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    writable: true,
-    value: {
-      getItem: () => cached,
-      setItem: (_, value) => {
-        cached = value;
-      },
-    },
-  });
-  t.mock.method(globalThis, "fetch", async (_, options) => {
-    fetched++;
+const cacheKey = "astrbot:sponsor-catalog:v2";
+let now, fetch;
+beforeEach(() => {
+  now = Date.now();
+  vi.spyOn(Date, "now").mockReturnValue(now);
+  fetch = vi.fn(async (_url, options) => {
     assert.equal(options.credentials, "omit");
     return Response.json(defaults);
   });
-  let sequence = 0;
-  const freshModule = () => import(`../src/utils/sponsorCatalog.ts?test=${sequence++}`);
+  vi.stubGlobal("fetch", fetch);
+});
+const freshModule = async () => {
+  vi.resetModules();
+  return import("../src/utils/sponsorCatalog.ts");
+};
+const cache = () => JSON.parse(localStorage.getItem(cacheKey));
+const seed = (value) => localStorage.setItem(cacheKey, typeof value === "string" ? value : JSON.stringify(value));
 
-  await t.test("fetches once, deduplicates and persists a valid catalog", async () => {
-    const module = await freshModule();
-    await Promise.all([module.loadSponsorCatalog(), module.loadSponsorCatalog()]);
-    assert.equal(JSON.parse(cached).catalog.sponsors[0].website_url, defaults.sponsors[0].website_url);
-    assert.equal(module.sponsorCatalog.value.sponsors[0].help_url, defaults.sponsors[0].help_url);
-    assert.equal(fetched, 1);
-    assert.equal(JSON.parse(cached).fetchedAt, now);
-    assert.equal(module.sponsorCatalog.value.sponsors.length, 3);
-    assert.deepEqual(JSON.parse(cached).catalog.sponsors[1].i18n, defaults.sponsors[1].i18n);
-    assert.deepEqual(module.sponsorCatalog.value.sponsors[1].i18n, defaults.sponsors[1].i18n);
-    await module.loadSponsorCatalog();
-    assert.equal(fetched, 1);
-  });
-  await t.test("fresh storage avoids a request until exactly six hours", async () => {
-    cached = JSON.stringify({
-      fetchedAt: now - SPONSOR_CACHE_TTL + 1,
-      catalog: defaults,
-    });
+test("fetches once, deduplicates and persists a valid catalog", async () => {
+  const module = await freshModule();
+  await Promise.all([module.loadSponsorCatalog(), module.loadSponsorCatalog()]);
+  assert.equal(cache().catalog.sponsors[0].website_url, defaults.sponsors[0].website_url);
+  assert.equal(module.sponsorCatalog.value.sponsors[0].help_url, defaults.sponsors[0].help_url);
+  assert.equal(fetch.mock.calls.length, 1);
+  assert.equal(cache().fetchedAt, now);
+  assert.equal(module.sponsorCatalog.value.sponsors.length, 3);
+  assert.deepEqual(cache().catalog.sponsors[1].i18n, defaults.sponsors[1].i18n);
+  assert.deepEqual(module.sponsorCatalog.value.sponsors[1].i18n, defaults.sponsors[1].i18n);
+  await module.loadSponsorCatalog();
+  assert.equal(fetch.mock.calls.length, 1);
+});
+
+test("fresh storage avoids a request until exactly six hours", async () => {
+  seed({ fetchedAt: now - SPONSOR_CACHE_TTL + 1, catalog: defaults });
+  await (await freshModule()).loadSponsorCatalog();
+  assert.equal(fetch.mock.calls.length, 0);
+  seed({ fetchedAt: now - SPONSOR_CACHE_TTL, catalog: defaults });
+  await (await freshModule()).loadSponsorCatalog();
+  assert.equal(fetch.mock.calls.length, 1);
+});
+
+test("corrupt and future-dated caches are replaced", async () => {
+  for (const value of ["broken-json", JSON.stringify({ fetchedAt: now + 1, catalog: defaults })]) {
+    seed(value);
     await (await freshModule()).loadSponsorCatalog();
-    assert.equal(fetched, 1);
-    cached = JSON.stringify({
-      fetchedAt: now - SPONSOR_CACHE_TTL,
-      catalog: defaults,
-    });
-    await (await freshModule()).loadSponsorCatalog();
-    assert.equal(fetched, 2);
+    assert.equal(cache().fetchedAt, now);
+  }
+  assert.equal(fetch.mock.calls.length, 2);
+});
+
+test("offline refresh retains stale data and a first visit exposes no remote catalog", async () => {
+  fetch.mockRejectedValue(new Error("Offline"));
+  seed({ fetchedAt: now - SPONSOR_CACHE_TTL, catalog: defaults });
+  const stale = await freshModule();
+  await stale.loadSponsorCatalog();
+  assert.equal(stale.sponsorCatalog.value.sponsors.length, 3);
+  localStorage.removeItem(cacheKey);
+  const empty = await freshModule();
+  await empty.loadSponsorCatalog();
+  assert.equal(empty.sponsorCatalog.value, null);
+});
+
+test("invalid remote URLs never replace a valid cached catalog", async () => {
+  seed({ fetchedAt: now - SPONSOR_CACHE_TTL, catalog: defaults });
+  fetch.mockImplementation(async () =>
+    Response.json({
+      ...defaults,
+      sponsors: [{ ...defaults.sponsors[0], api_base: "javascript:alert(1)" }],
+    }),
+  );
+  const module = await freshModule();
+  await module.loadSponsorCatalog();
+  assert.equal(module.sponsorCatalog.value.sponsors[0].api_base, defaults.sponsors[0].api_base);
+});
+
+test("storage failures still allow loading and an empty remote list remains authoritative", async () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new Error("Disabled");
   });
-  await t.test("corrupt and future-dated caches are replaced", async () => {
-    for (const value of ["broken-json", JSON.stringify({ fetchedAt: now + 1, catalog: defaults })]) {
-      cached = value;
-      await (await freshModule()).loadSponsorCatalog();
-      assert.equal(JSON.parse(cached).fetchedAt, now);
-    }
-    assert.equal(fetched, 4);
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("Full");
   });
-  await t.test("offline refresh retains stale data and first visit uses built-ins", async () => {
-    globalThis.fetch = async () => {
-      throw new Error("Offline");
-    };
-    cached = JSON.stringify({
-      fetchedAt: now - SPONSOR_CACHE_TTL,
-      catalog: defaults,
-    });
-    const stale = await freshModule();
-    await stale.loadSponsorCatalog();
-    assert.equal(stale.sponsorCatalog.value.sponsors.length, 3);
-    cached = null;
-    const empty = await freshModule();
-    await empty.loadSponsorCatalog();
-    assert.equal(empty.sponsorCatalog.value, null);
-  });
-  await t.test("invalid remote data never replaces a valid cached catalog", async () => {
-    cached = JSON.stringify({
-      fetchedAt: now - SPONSOR_CACHE_TTL,
-      catalog: defaults,
-    });
-    globalThis.fetch = async () =>
-      Response.json({
-        ...defaults,
-        sponsors: [{ ...defaults.sponsors[0], api_base: "javascript:alert(1)" }],
-      });
-    const module = await freshModule();
-    await module.loadSponsorCatalog();
-    assert.equal(module.sponsorCatalog.value.sponsors[0].api_base, defaults.sponsors[0].api_base);
-  });
-  await t.test("storage failures still allow loading and an empty remote list remains authoritative", async () => {
-    globalThis.localStorage = {
-      getItem() {
-        throw new Error("Disabled");
-      },
-      setItem() {
-        throw new Error("Full");
-      },
-    };
-    globalThis.fetch = async () => Response.json({ ...defaults, sponsors: [] });
-    const module = await freshModule();
-    await module.loadSponsorCatalog();
-    assert.deepEqual(module.sponsorCatalog.value.sponsors, []);
-  });
+  fetch.mockImplementation(async () => Response.json({ ...defaults, sponsors: [] }));
+  const module = await freshModule();
+  await module.loadSponsorCatalog();
+  assert.deepEqual(module.sponsorCatalog.value.sponsors, []);
 });

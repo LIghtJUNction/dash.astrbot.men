@@ -135,7 +135,8 @@
               </v-alert>
 
               <v-file-input
-                v-model="importFile"
+                :model-value="importFile"
+                @update:model-value="setImportFile"
                 :label="t('features.settings.backup.import.selectFile')"
                 accept=".zip"
                 prepend-icon="mdi-file-upload"
@@ -584,8 +585,7 @@ import { backupApi } from "@/api/v1";
 import { useChunkedUpload } from "@/composables/useChunkedUpload";
 import { useI18n } from "@/i18n/composables";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
-import axios, { resolveApiUrl } from "@/utils/request";
+import { isAxiosError } from "@/utils/request";
 import { restartAstrBot as restartAstrBotRuntime } from "@/utils/restartAstrBot";
 import WaitingForRestart from "./WaitingForRestart.vue";
 
@@ -593,50 +593,19 @@ interface WfrExposed {
   check: (initialStartTime?: number | null) => void | Promise<void>;
   stop?: () => void;
 }
-type ExportStatus = "idle" | "processing" | "completed" | "failed";
-type ImportStatus = ExportStatus | "uploading" | "confirm";
-type BackupResponse<T> =
-  | { status: "ok"; data: T; message?: string }
-  | { status: "error"; data?: null; message?: string };
-
-interface BackupProgress {
-  current: number;
-  total: number;
-  message: string;
-}
-
-type BackupTaskProgress<T> = { task_id: string; type: "export" | "import" } & (
-  | { status: "pending" }
-  | { status: "processing"; progress?: BackupProgress }
-  | { status: "completed"; result: T }
-  | { status: "failed"; error: string | null }
-);
-
 interface BackupExportResult {
   filename: string;
-  path: string;
-  size: number;
 }
-
-interface BackupImportResult {
-  success: boolean;
-  imported_tables: Record<string, number>;
-  imported_files: Record<string, number>;
-  imported_directories: Record<string, number>;
-  warnings: string[];
-  errors: string[];
-}
-
 interface BackupCheckResult {
   valid: boolean;
-  error: string;
-  can_import: boolean;
-  backup_version: string;
-  current_version: string;
-  backup_time: string;
-  version_status: "" | "major_diff" | "minor_diff" | "match";
-  warnings: string[];
-  backup_summary: {
+  error?: string;
+  can_import?: boolean;
+  backup_version?: string;
+  current_version?: string;
+  backup_time?: string;
+  version_status?: "major_diff" | "minor_diff" | "match";
+  warnings?: string[];
+  backup_summary?: {
     tables?: string[];
     has_knowledge_bases?: boolean;
     has_config?: boolean;
@@ -658,17 +627,22 @@ const confirmDialog = useConfirmDialog();
 const isOpen = ref(false);
 const activeTab = ref("export");
 const wfr = ref<WfrExposed | null>(null);
+let exportRequestVersion = 0;
+let importRequestVersion = 0;
 
 // 导出状态
-const exportStatus = ref<ExportStatus>("idle");
+const exportStatus = ref("idle"); // idle, processing, completed, failed
 const exportTaskId = ref<string | null>(null);
 const exportProgress = ref({ current: 0, total: 100, message: "" });
 const exportResult = ref<BackupExportResult | null>(null);
 const exportError = ref("");
 
 // 导入状态
-const importStatus = ref<ImportStatus>("idle");
+const importStatus = ref("idle"); // idle, uploading, confirm, processing, completed, failed
 const importFile = ref<File | null>(null);
+function setImportFile(value: File | File[] | null | undefined) {
+  importFile.value = (Array.isArray(value) ? value[0] : value) ?? null;
+}
 const importTaskId = ref<string | null>(null);
 const importProgress = ref({ current: 0, total: 100, message: "" });
 const importError = ref("");
@@ -759,7 +733,7 @@ watch(activeTab, (newVal) => {
 const loadBackupList = async () => {
   loadingList.value = true;
   try {
-    const response = await axios.get<BackupResponse<{ items: BackupListItem[] }>>("/api/backup/list");
+    const response = await backupApi.list();
     if (response.data.status === "ok") {
       backupList.value = response.data.data.items || [];
     }
@@ -772,20 +746,23 @@ const loadBackupList = async () => {
 
 // 开始导出
 const startExport = async () => {
+  const requestVersion = ++exportRequestVersion;
   exportStatus.value = "processing";
   exportProgress.value = { current: 0, total: 100, message: "" };
 
   try {
-    const response = await axios.post<BackupResponse<{ task_id: string }>>("/api/backup/export");
+    const response = await backupApi.create();
+    if (requestVersion !== exportRequestVersion || !isOpen.value) return;
     if (response.data.status === "ok") {
       exportTaskId.value = response.data.data.task_id;
       pollExportProgress();
     } else {
-      throw new Error(response.data.message);
+      throw new Error(response.data.message ?? undefined);
     }
   } catch (error: unknown) {
+    if (requestVersion !== exportRequestVersion || !isOpen.value) return;
     exportStatus.value = "failed";
-    exportError.value = resolveErrorMessage(error, "Export failed");
+    exportError.value = error instanceof Error ? error.message : "Export failed";
   }
 };
 
@@ -795,9 +772,7 @@ const pollExportProgress = async () => {
   if (!taskId) return;
 
   try {
-    const response = await axios.get<BackupResponse<BackupTaskProgress<BackupExportResult>>>("/api/backup/progress", {
-      params: { task_id: taskId },
-    });
+    const response = await backupApi.progress(taskId);
     if (exportTaskId.value !== taskId) return;
 
     if (response.data.status === "ok") {
@@ -809,7 +784,9 @@ const pollExportProgress = async () => {
           total: data.progress.total || 100,
           message: data.progress.message || "",
         };
-        setTimeout(pollExportProgress, 1000);
+        setTimeout(() => {
+          if (exportTaskId.value === taskId) void pollExportProgress();
+        }, 1000);
       } else if (data.status === "completed") {
         exportStatus.value = "completed";
         exportResult.value = data.result;
@@ -818,18 +795,21 @@ const pollExportProgress = async () => {
         exportStatus.value = "failed";
         exportError.value = data.error || "Export failed";
       } else {
-        setTimeout(pollExportProgress, 1000);
+        setTimeout(() => {
+          if (exportTaskId.value === taskId) void pollExportProgress();
+        }, 1000);
       }
     }
   } catch (error: unknown) {
     if (exportTaskId.value !== taskId) return;
     exportStatus.value = "failed";
-    exportError.value = resolveErrorMessage(error, "Failed to get export progress");
+    exportError.value = error instanceof Error ? error.message : "Failed to get export progress";
   }
 };
 
 // 重置导出状态
 const resetExport = () => {
+  ++exportRequestVersion;
   exportStatus.value = "idle";
   exportTaskId.value = null;
   exportProgress.value = { current: 0, total: 100, message: "" };
@@ -841,11 +821,13 @@ const resetExport = () => {
 const uploadAndCheck = async () => {
   const file = importFile.value;
   if (!file) return;
+  const requestVersion = ++importRequestVersion;
 
   importStatus.value = "uploading";
   uploadMessageOverride.value = "";
 
   const result = await uploader.start(file);
+  if (requestVersion !== importRequestVersion || importFile.value !== file || !isOpen.value) return;
   if (!result) {
     if (uploader.status.value === "error") {
       importStatus.value = "failed";
@@ -860,11 +842,13 @@ const uploadAndCheck = async () => {
 
 // 断点续传：补传缺失分片后接着预检查
 const resumeAndCheck = async () => {
+  const requestVersion = ++importRequestVersion;
   importStatus.value = "uploading";
   importError.value = "";
   uploadMessageOverride.value = "";
 
   const result = await uploader.resume();
+  if (requestVersion !== importRequestVersion || !isOpen.value) return;
   if (!result) {
     if (uploader.status.value === "error") {
       importStatus.value = "failed";
@@ -880,33 +864,39 @@ const resumeAndCheck = async () => {
 // 上传完成后的预检查
 const checkUploadedBackup = async () => {
   const filename = uploadedFilename.value;
+  const requestVersion = importRequestVersion;
   if (!filename) return;
   uploadMessageOverride.value = t("features.settings.backup.import.checking");
 
   try {
     const checkResponse = await backupApi.check(filename);
-    if (uploadedFilename.value !== filename) return;
+    if (requestVersion !== importRequestVersion || uploadedFilename.value !== filename || !isOpen.value) return;
 
     if (checkResponse.data.status !== "ok") {
       throw new Error(checkResponse.data.message || "Failed to check backup");
     }
 
-    const result = checkResponse.data.data;
-    checkResult.value = result;
+    checkResult.value = checkResponse.data.data;
 
-    // Validate the response snapshot before entering the confirmation state.
-    if (!result?.valid) {
+    // 检查是否有效
+    if (!checkResult.value?.valid) {
       importStatus.value = "failed";
-      importError.value = result?.error || t("features.settings.backup.import.invalidBackup");
+      importError.value = checkResult.value?.error || t("features.settings.backup.import.invalidBackup");
       return;
     }
 
     // 显示确认对话框
     importStatus.value = "confirm";
-  } catch (error: unknown) {
-    if (uploadedFilename.value !== filename) return;
+  } catch (error) {
+    if (requestVersion !== importRequestVersion || uploadedFilename.value !== filename || !isOpen.value) return;
     importStatus.value = "failed";
-    importError.value = resolveErrorMessage(error, "Upload failed");
+    if (isAxiosError(error)) {
+      importError.value = error.response?.data?.message || "Upload failed";
+    } else if (error instanceof Error) {
+      importError.value = error.message;
+    } else {
+      importError.value = "Upload failed";
+    }
   }
 };
 
@@ -914,25 +904,31 @@ const checkUploadedBackup = async () => {
 const confirmImport = async () => {
   const filename = uploadedFilename.value;
   if (!filename) return;
+  const requestVersion = ++importRequestVersion;
 
   importStatus.value = "processing";
   importProgress.value = { current: 0, total: 100, message: "" };
 
   try {
-    const response = await axios.post<BackupResponse<{ task_id: string }>>("/api/backup/import", {
-      filename,
-      confirmed: true,
-    });
+    const response = await backupApi.import(filename, true);
+    if (requestVersion !== importRequestVersion || uploadedFilename.value !== filename || !isOpen.value) return;
 
     if (response.data.status === "ok") {
       importTaskId.value = response.data.data.task_id;
       pollImportProgress();
     } else {
-      throw new Error(response.data.message);
+      throw new Error(response.data.message ?? undefined);
     }
   } catch (error: unknown) {
+    if (requestVersion !== importRequestVersion || uploadedFilename.value !== filename || !isOpen.value) return;
     importStatus.value = "failed";
-    importError.value = resolveErrorMessage(error, "Import failed");
+    if (isAxiosError(error)) {
+      importError.value = error.response?.data?.message || "Import failed";
+    } else if (error instanceof Error) {
+      importError.value = error.message;
+    } else {
+      importError.value = "Import failed";
+    }
   }
 };
 
@@ -942,9 +938,7 @@ const pollImportProgress = async () => {
   if (!taskId) return;
 
   try {
-    const response = await axios.get<BackupResponse<BackupTaskProgress<BackupImportResult>>>("/api/backup/progress", {
-      params: { task_id: taskId },
-    });
+    const response = await backupApi.progress(taskId);
     if (importTaskId.value !== taskId) return;
 
     if (response.data.status === "ok") {
@@ -956,28 +950,30 @@ const pollImportProgress = async () => {
           total: data.progress.total || 100,
           message: data.progress.message || "",
         };
-        setTimeout(pollImportProgress, 1000);
+        setTimeout(() => {
+          if (importTaskId.value === taskId) void pollImportProgress();
+        }, 1000);
       } else if (data.status === "completed") {
         importStatus.value = "completed";
       } else if (data.status === "failed") {
         importStatus.value = "failed";
         importError.value = data.error || "Import failed";
       } else {
-        setTimeout(pollImportProgress, 1000);
+        setTimeout(() => {
+          if (importTaskId.value === taskId) void pollImportProgress();
+        }, 1000);
       }
     }
   } catch (error: unknown) {
     if (importTaskId.value !== taskId) return;
     importStatus.value = "failed";
-    importError.value = resolveErrorMessage(error, "Failed to get import progress");
+    importError.value = error instanceof Error ? error.message : "Failed to get import progress";
   }
 };
 
 // 重置导入状态
 const resetImport = async () => {
-  // 取消并清理可能存在的上传会话（包括失败后可续传的会话）
-  await uploader.cancel();
-
+  ++importRequestVersion;
   importStatus.value = "idle";
   importFile.value = null;
   importTaskId.value = null;
@@ -986,10 +982,11 @@ const resetImport = async () => {
   uploadedFilename.value = "";
   checkResult.value = null;
   uploadMessageOverride.value = "";
+  await uploader.cancel();
 };
 
 // 下载备份（使用浏览器原生下载，可显示下载进度）
-const downloadBackup = (filename?: string) => {
+const downloadBackup = (filename: string | undefined) => {
   if (!filename) return;
   // 获取 token 用于鉴权（因为浏览器原生下载无法携带 Authorization header）
   const token = localStorage.getItem("token");
@@ -999,9 +996,7 @@ const downloadBackup = (filename?: string) => {
   }
 
   // 直接使用浏览器下载，这样可以看到原生下载进度条
-  const downloadUrl = resolveApiUrl(
-    `/api/backup/download?filename=${encodeURIComponent(filename)}&token=${encodeURIComponent(token)}`,
-  );
+  const downloadUrl = backupApi.downloadUrl(filename, token);
 
   // 创建隐藏的 a 标签触发下载
   const link = document.createElement("a");
@@ -1015,25 +1010,23 @@ const downloadBackup = (filename?: string) => {
 
 // 从列表中恢复备份
 const restoreFromList = async (filename: string) => {
+  const requestVersion = ++importRequestVersion;
   // 切换到导入标签页并设置文件名
   uploadedFilename.value = filename;
 
   // 预检查
   try {
-    const checkResponse = await axios.post<BackupResponse<BackupCheckResult | null>>("/api/backup/check", {
-      filename,
-    });
-    if (!isOpen.value || uploadedFilename.value !== filename) return;
+    const checkResponse = await backupApi.check(filename);
+    if (requestVersion !== importRequestVersion || !isOpen.value || uploadedFilename.value !== filename) return;
 
     if (checkResponse.data.status !== "ok") {
       throw new Error(checkResponse.data.message || "Failed to check backup");
     }
 
-    const result = checkResponse.data.data;
-    checkResult.value = result;
+    checkResult.value = checkResponse.data.data;
 
-    if (!result?.valid) {
-      alert(result?.error || t("features.settings.backup.import.invalidBackup"));
+    if (!checkResult.value?.valid) {
+      alert(checkResult.value?.error || t("features.settings.backup.import.invalidBackup"));
       return;
     }
 
@@ -1041,7 +1034,14 @@ const restoreFromList = async (filename: string) => {
     activeTab.value = "import";
     importStatus.value = "confirm";
   } catch (error: unknown) {
-    alert(resolveErrorMessage(error, "Check failed"));
+    if (requestVersion !== importRequestVersion || !isOpen.value || uploadedFilename.value !== filename) return;
+    let msg = "Check failed";
+    if (isAxiosError(error)) {
+      msg = error.response?.data?.message || "Check failed";
+    } else if (error instanceof Error) {
+      msg = error.message;
+    }
+    alert(msg);
   }
 };
 
@@ -1050,14 +1050,14 @@ const deleteBackup = async (filename: string) => {
   if (!(await askForConfirmation(t("features.settings.backup.list.confirmDelete"), confirmDialog))) return;
 
   try {
-    const response = await axios.post("/api/backup/delete", { filename });
+    const response = await backupApi.delete(filename);
     if (response.data.status === "ok") {
       loadBackupList();
     } else {
       alert(response.data.message || "Delete failed");
     }
   } catch (error: unknown) {
-    alert(resolveErrorMessage(error, "Delete failed"));
+    alert(error instanceof Error ? error.message : "Delete failed");
   }
 };
 
@@ -1105,8 +1105,7 @@ const confirmRename = async () => {
   renameError.value = "";
 
   try {
-    const response = await axios.post("/api/backup/rename", {
-      filename: renameOldFilename.value,
+    const response = await backupApi.rename(renameOldFilename.value, {
       new_name: renameNewName.value,
     });
 
@@ -1117,7 +1116,13 @@ const confirmRename = async () => {
       renameError.value = response.data.message || t("features.settings.backup.list.renameFailed");
     }
   } catch (error: unknown) {
-    renameError.value = resolveErrorMessage(error, t("features.settings.backup.list.renameFailed"));
+    if (isAxiosError(error)) {
+      renameError.value = error.response?.data?.message || t("features.settings.backup.list.renameFailed");
+    } else if (error instanceof Error) {
+      renameError.value = error.message;
+    } else {
+      renameError.value = t("features.settings.backup.list.renameFailed");
+    }
   } finally {
     renameLoading.value = false;
   }
@@ -1159,8 +1164,8 @@ const restartAstrBot = async () => {
 // 重置所有状态
 const resetAll = async () => {
   resetExport();
-  await resetImport();
   activeTab.value = "export";
+  await resetImport();
 };
 
 // 关闭对话框

@@ -4,7 +4,7 @@
 
 /** 指令项接口 */
 export interface CommandItem {
-  command_key: string;
+  command_key?: string;
   handler_full_name: string;
   handler_name: string;
   plugin: string;
@@ -69,13 +69,6 @@ export interface DetailsDialogState {
   command: CommandItem | null;
 }
 
-/** Tool activation counts. */
-export interface ToolSummary {
-  total: number;
-  active: number;
-  inactive: number;
-}
-
 /** Toast 消息状态 */
 export interface SnackbarState {
   show: boolean;
@@ -109,9 +102,6 @@ export interface ToolItem {
   name: string;
   description: string;
   active: boolean;
-  permission?: "admin" | "member";
-  permission_configured?: boolean;
-  readonly?: boolean;
   parameters?: {
     properties?: Record<string, ToolParameter>;
   };
@@ -120,4 +110,13 @@ export interface ToolItem {
   runtime_kind?: "legacy" | "sdk";
   plugin_id?: string | null;
   source?: string;
+  permission?: "admin" | "member";
+  /** True when permission was explicitly configured rather than a fallback default. */
+  permission_configured?: boolean;
+}
+
+export interface ToolSummary {
+  total: number;
+  active: number;
+  inactive: number;
 }

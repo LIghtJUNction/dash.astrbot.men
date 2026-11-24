@@ -2,9 +2,7 @@
   <div class="provider-sources-panel">
     <div class="provider-sources-head">
       <div class="provider-sources-head__copy">
-        <h3 class="provider-sources-title">
-          {{ title || tm("providerSources.title") }}
-        </h3>
+        <h3 class="provider-sources-title">{{ title || tm('providerSources.title') }}</h3>
       </div>
 
       <div class="provider-sources-controls">
@@ -20,18 +18,14 @@
             hide-details
             :placeholder="selectHint || tm('providerSources.selectHint')"
             @update:model-value="selectSourceByValue"
-          >
+        >
             <template #selection="{ internalItem: item }">
               <div class="provider-source-select-value">
                 <v-avatar size="22" rounded="lg" class="provider-source-avatar">
                   <v-img
                     v-if="item.raw.source?.provider"
                     :src="resolveSourceIcon(item.raw.source)"
-                    :class="{
-                      'provider-icon--monochrome': isMonochromeSourceIcon(
-                        item.raw.source,
-                      ),
-                    }"
+                    :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                     alt="provider logo"
                     cover
                   ></v-img>
@@ -42,21 +36,16 @@
             </template>
 
             <template #item="{ props: itemProps, internalItem: item }">
-              <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle">
+              <v-list-item
+                v-bind="itemProps"
+                :subtitle="item.raw.subtitle"
+              >
                 <template #prepend>
-                  <v-avatar
-                    size="24"
-                    rounded="lg"
-                    class="provider-source-avatar me-2"
-                  >
+                  <v-avatar size="24" rounded="lg" class="provider-source-avatar me-2">
                     <v-img
                       v-if="item.raw.source?.provider"
                       :src="resolveSourceIcon(item.raw.source)"
-                      :class="{
-                        'provider-icon--monochrome': isMonochromeSourceIcon(
-                          item.raw.source,
-                        ),
-                      }"
+                      :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(item.raw.source) }"
                       alt="provider logo"
                       cover
                     ></v-img>
@@ -96,35 +85,24 @@
       />
     </div>
 
-    <div
-      v-if="displayedProviderSources.length > 0"
-      class="provider-sources-list"
-    >
+    <div v-if="displayedProviderSources.length > 0" class="provider-sources-list">
       <button
         v-for="source in displayedProviderSources"
-        :key="
-          source.isPlaceholder ? `template-${source.templateKey}` : source.id
-        "
+        :key="source.isPlaceholder ? `template-${source.templateKey}` : source.id"
         type="button"
         :class="[
           'provider-source-item',
           {
-            'provider-source-item--active': isActive(source),
-          },
+            'provider-source-item--active': isActive(source)
+          }
         ]"
         @click="emitSelectSource(source)"
       >
-        <v-avatar
-          size="28"
-          rounded="lg"
-          class="provider-source-item__avatar provider-source-avatar"
-        >
+        <v-avatar size="28" rounded="lg" class="provider-source-item__avatar provider-source-avatar">
           <v-img
             v-if="source?.provider"
             :src="resolveSourceIcon(source)"
-            :class="{
-              'provider-icon--monochrome': isMonochromeSourceIcon(source),
-            }"
+            :class="{ 'provider-icon--monochrome': isMonochromeSourceIcon(source) }"
             alt="provider logo"
             cover
           ></v-img>
@@ -157,7 +135,7 @@
     <div v-else-if="!loading" class="provider-sources-empty">
       <v-icon size="44" color="grey-lighten-1">mdi-api-off</v-icon>
       <p class="provider-sources-empty__text">
-        {{ emptyText || tm("providerSources.empty") }}
+        {{ emptyText || tm('providerSources.empty') }}
       </p>
     </div>
   </div>
@@ -166,8 +144,6 @@
 <script setup>
 import { computed } from "vue";
 import ProviderSourceDialog from "@/components/provider/ProviderSourceDialog.vue";
-import StyledMenu from "@/components/shared/StyledMenu.vue";
-import { isMonochromeProviderIcon } from "@/utils/providerUtils";
 
 const props = defineProps({
   displayedProviderSources: {
@@ -212,7 +188,7 @@ const props = defineProps({
   },
   isMonochromeSourceIcon: {
     type: Function,
-    default: (source) => isMonochromeProviderIcon(typeof source?.provider === "string" ? source.provider : ""),
+    required: true,
   },
   getSourceDisplayName: {
     type: Function,
@@ -283,7 +259,7 @@ const selectSourceByValue = (value) => {
   flex: 0 0 auto;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 20px 12px;
+  padding: 24px 20px 16px;
   position: relative;
 }
 
@@ -307,7 +283,7 @@ const selectSourceByValue = (value) => {
 
 .provider-sources-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 650;
   line-height: 1.3;
 }
@@ -354,21 +330,30 @@ const selectSourceByValue = (value) => {
 
 .provider-source-item {
   width: 100%;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
   color: inherit;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px;
   cursor: pointer;
   text-align: left;
 }
 
-.provider-source-item:hover,
-.provider-source-item--active {
+.provider-source-item:hover {
   background: rgba(var(--v-theme-on-surface), 0.05);
+}
+
+.provider-source-item--active {
+  background: rgba(var(--v-theme-primary), 0.08);
+  border-color: rgba(var(--v-theme-primary), 0.2);
+}
+
+.provider-source-item:focus-visible {
+  outline: 2px solid rgb(var(--v-theme-primary));
+  outline-offset: 2px;
 }
 
 .provider-source-avatar {
@@ -403,6 +388,7 @@ const selectSourceByValue = (value) => {
 }
 
 .provider-source-item:hover .provider-source-item__actions,
+.provider-source-item:focus-within .provider-source-item__actions,
 .provider-source-item--active .provider-source-item__actions {
   opacity: 1;
 }
@@ -424,16 +410,14 @@ const selectSourceByValue = (value) => {
   font-size: 13px;
 }
 
-@media (max-width: 960px) {
+@container provider-workbench (max-width: 960px) {
   .provider-sources-panel {
     height: auto;
   }
 
   .provider-sources-head {
-    padding: 16px 16px 8px;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 10px;
+    padding: 16px 24px;
+    gap: 20px;
   }
 
   .provider-sources-mobile-select {
@@ -445,7 +429,7 @@ const selectSourceByValue = (value) => {
   }
 
   .provider-sources-controls {
-    width: 100%;
+    flex: 1;
   }
 
   .provider-sources-list {
@@ -457,7 +441,14 @@ const selectSourceByValue = (value) => {
   }
 }
 
-@media (max-width: 600px) {
+@container provider-workbench (max-width: 600px) {
+  .provider-sources-head {
+    padding: 14px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
   .provider-sources-controls :deep(.v-btn) {
     min-width: max-content;
   }

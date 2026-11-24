@@ -1,7 +1,21 @@
 <template>
   <section class="sidebar-section project-list-shell">
     <div class="sidebar-section-header">
-      <button type="button" class="project-section-toggle" @click="toggleExpanded">{{ tm("project.title") }}</button>
+      <button
+        type="button"
+        class="project-section-toggle"
+        :aria-expanded="projectsExpanded"
+        @click="projectsExpanded = !projectsExpanded"
+      >
+        <span>{{ tm("project.title") }}</span>
+        <ChevronDown
+          v-if="projectsExpanded"
+          class="expanded-chevron"
+          :size="16"
+          aria-hidden="true"
+        />
+        <ChevronRight v-else :size="16" aria-hidden="true" />
+      </button>
       <v-btn
         icon
         size="x-small"
@@ -14,7 +28,10 @@
       </v-btn>
     </div>
 
-    <div v-show="expanded" class="project-list-wrap">
+    <div v-show="projectsExpanded" class="project-list-wrap">
+      <div v-if="!projects.length" class="project-list-empty">
+        {{ tm("project.noProjects") }}
+      </div>
       <div v-for="project in projects" :key="project.project_id">
         <div
           class="project-row project-item"
@@ -136,6 +153,7 @@
 import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from "@lucide/vue";
 import { ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { chatPreferences } from "@/utils/chatPreferences";
 import { askForConfirmation, useConfirmDialog } from "@/utils/confirmDialog";
 
 export interface Project {
@@ -163,7 +181,6 @@ interface Props {
   selectedProjectId?: string | null;
   activeSessionId?: string | null;
   isSessionRunning?: (sessionId: string) => boolean;
-  initialExpanded?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -171,7 +188,6 @@ const props = withDefaults(defineProps<Props>(), {
   loadingProjectIds: () => [],
   selectedProjectId: null,
   activeSessionId: null,
-  initialExpanded: false,
 });
 
 const emit = defineEmits<{
@@ -188,13 +204,22 @@ const emit = defineEmits<{
 const { tm } = useModuleI18n("features/chat");
 const confirmDialog = useConfirmDialog();
 
-const expanded = ref(readProjectsExpanded());
+const projectsExpanded = ref(chatPreferences().global.projectsExpanded === true);
+
+watch(projectsExpanded, (expanded) => {
+  chatPreferences((preferences) => {
+    preferences.global.projectsExpanded = expanded;
+  });
+});
+
 const expandedProjectIds = ref<Set<string>>(readExpandedProjectIds());
 
 watch(
   () => props.selectedProjectId,
   (projectId) => {
-    if (projectId) setProjectExpanded(projectId, true);
+    if (projectId) {
+      setProjectExpanded(projectId, true);
+    }
   },
 );
 
@@ -211,55 +236,37 @@ watch(
   { immediate: true },
 );
 
-function readProjectsExpanded() {
-  const savedState = localStorage.getItem("projectsExpanded");
-  if (savedState === null) return props.initialExpanded;
-  try {
-    return Boolean(JSON.parse(savedState));
-  } catch {
-    return props.initialExpanded;
-  }
-}
-
 function readExpandedProjectIds() {
-  try {
-    const raw = localStorage.getItem("chat.projectExpandedIds");
-    const parsed: unknown = raw ? JSON.parse(raw) : [];
-    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function toggleExpanded() {
-  expanded.value = !expanded.value;
-  localStorage.setItem("projectsExpanded", JSON.stringify(expanded.value));
+  const ids = chatPreferences().global.expandedProjectIds;
+  return new Set<string>(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
 }
 
 function persistExpandedProjectIds() {
-  localStorage.setItem("chat.projectExpandedIds", JSON.stringify([...expandedProjectIds.value]));
+  chatPreferences((preferences) => {
+    preferences.global.expandedProjectIds = [...expandedProjectIds.value];
+  });
 }
 
 function isProjectExpanded(projectId: string) {
   return expandedProjectIds.value.has(projectId);
 }
 
-function setProjectExpanded(projectId: string, nextExpanded: boolean) {
-  if (isProjectExpanded(projectId) === nextExpanded) return;
+function setProjectExpanded(projectId: string, expanded: boolean) {
+  if (isProjectExpanded(projectId) === expanded) return;
   const next = new Set(expandedProjectIds.value);
-  if (nextExpanded) next.add(projectId);
-  else next.delete(projectId);
+  if (expanded) {
+    next.add(projectId);
+  } else {
+    next.delete(projectId);
+  }
   expandedProjectIds.value = next;
   persistExpandedProjectIds();
-  emit("toggleProject", projectId, nextExpanded);
-}
-
-function toggleProject(projectId: string) {
-  setProjectExpanded(projectId, !isProjectExpanded(projectId));
+  emit("toggleProject", projectId, expanded);
 }
 
 function handleProjectClick(project: Project) {
-  setProjectExpanded(project.project_id, !isProjectExpanded(project.project_id));
+  const nextExpanded = !isProjectExpanded(project.project_id);
+  setProjectExpanded(project.project_id, nextExpanded);
   emit("selectProject", project.project_id);
 }
 
@@ -293,7 +300,6 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
 </script>
 
 <style scoped>
-.project-section-toggle { border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: left; }
 .project-list-shell {
   margin-top: 2px;
 }
@@ -303,10 +309,33 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px 4px;
+  padding: 0 10px;
   color: var(--chat-section-label);
   font-size: 12px;
   font-weight: 500;
+}
+
+.project-section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-section-toggle:hover {
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.project-section-toggle .expanded-chevron {
+  opacity: 0;
+}
+
+.project-section-toggle:hover .expanded-chevron,
+.project-section-toggle:focus-visible .expanded-chevron {
+  opacity: 1;
 }
 
 .section-action-btn,
@@ -344,7 +373,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   width: 100%;
   min-height: 30px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-navigation);
   background: transparent;
   color: inherit;
   display: flex;
@@ -466,6 +495,7 @@ async function handleDeleteSession(projectId: string, session: ProjectSession) {
   visibility: hidden;
 }
 
+.project-list-empty,
 .project-session-empty {
   padding: 5px 10px;
   color: var(--chat-muted);

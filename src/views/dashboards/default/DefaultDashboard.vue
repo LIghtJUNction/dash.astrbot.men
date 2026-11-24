@@ -74,26 +74,16 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
-import type { ApiEnvelope } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import axios from "@/utils/request";
 import MemoryUsage from "./components/MemoryUsage.vue";
 import MessageStat from "./components/MessageStat.vue";
 import OnlinePlatform from "./components/OnlinePlatform.vue";
-import PlatformStat, { type PlatformMessageStat } from "./components/PlatformStat.vue";
+import PlatformStat from "./components/PlatformStat.vue";
 import RunningTime from "./components/RunningTime.vue";
 import TotalMessage from "./components/TotalMessage.vue";
 
-type NoticeType = "success" | "info" | "warning" | "error";
-
-interface DashboardNotice {
-  title: string;
-  content: string;
-  type?: string;
-}
-
-export default defineComponent({
+export default {
   name: "DefaultDashboard",
   components: {
     TotalMessage,
@@ -109,10 +99,10 @@ export default defineComponent({
   },
   data() {
     return {
-      stat: {} as { platform?: PlatformMessageStat[] },
+      stat: {},
       noticeTitle: "",
       noticeContent: "",
-      noticeType: "info" as NoticeType,
+      noticeType: "info" as "info" | "success" | "warning" | "error",
       lastUpdated: "",
       refreshInterval: null as ReturnType<typeof setInterval> | null,
       isRefreshing: false,
@@ -141,7 +131,7 @@ export default defineComponent({
     async fetchData() {
       this.isRefreshing = true;
       try {
-        const res = await axios.get<ApiEnvelope<{ platform: PlatformMessageStat[] }>>("/api/stat/get");
+        const res = await axios.get("/api/stat/get");
         this.stat = res.data.data;
         this.lastUpdated = new Date().toLocaleTimeString();
         console.info("Dashboard data:", this.stat);
@@ -154,14 +144,14 @@ export default defineComponent({
 
     fetchNotice() {
       axios
-        .get<{ data?: { "dashboard-notice"?: DashboardNotice } }>("https://api.soulter.top/astrbot-announcement")
+        .get("https://api.soulter.top/astrbot-announcement")
         .then((res) => {
-          const notice = res.data.data?.["dashboard-notice"];
-          if (notice) {
-            this.noticeTitle = notice.title;
-            this.noticeContent = notice.content;
-            const type = notice.type;
-            this.noticeType = type === "success" || type === "warning" || type === "error" ? type : "info";
+          const data = res.data.data;
+          // 如果 dashboard-notice 在其中
+          if (data["dashboard-notice"]) {
+            this.noticeTitle = data["dashboard-notice"].title;
+            this.noticeContent = data["dashboard-notice"].content;
+            this.noticeType = data["dashboard-notice"].type;
           }
         })
         .catch((error) => {
@@ -169,7 +159,7 @@ export default defineComponent({
         });
     },
   },
-});
+};
 </script>
 
 <style scoped>

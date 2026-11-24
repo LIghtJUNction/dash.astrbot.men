@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
-import Chat from "@/components/chat/Chat.vue";
-// biome-ignore lint/style/useImportType: Vue template components require runtime imports.
+import { useDisplay } from "vuetify";
+import { statsApi } from "@/api/v1";
 import MigrationDialog from "@/components/shared/MigrationDialog.vue";
-import ReadmeDialog from "@/components/shared/ReadmeDialog.vue";
 import { useI18n } from "@/i18n/composables";
 import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
@@ -13,6 +12,9 @@ import { useRouterLoadingStore } from "@/stores/routerLoading";
 import axios from "@/utils/request";
 import VerticalHeaderVue from "./vertical-header/VerticalHeader.vue";
 import VerticalSidebarVue from "./vertical-sidebar/VerticalSidebar.vue";
+
+const Chat = defineAsyncComponent(() => import("@/components/chat/Chat.vue"));
+const ReadmeDialog = defineAsyncComponent(() => import("@/components/shared/ReadmeDialog.vue"));
 
 const FIRST_NOTICE_SEEN_KEY = "astrbot:first_notice_seen:v1";
 
@@ -23,20 +25,29 @@ const { locale } = useI18n();
 const route = useRoute();
 const routerLoadingStore = useRouterLoadingStore();
 const isCurrentChatRoute = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isPluginPageRoute = computed(
+const isPluginViewRoute = computed(
   () => route.path.startsWith("/plugin-view/") || route.path.startsWith("/plugin-page/"),
 );
 const isProviderPageRoute = computed(() => route.path === "/providers");
 const isPlatformPageRoute = computed(() => route.path === "/platforms");
 const isViewportLockedRoute = computed(
-  () => isCurrentChatRoute.value || isProviderPageRoute.value || isPlatformPageRoute.value,
+  () =>
+    isCurrentChatRoute.value ||
+    isProviderPageRoute.value ||
+    isPlatformPageRoute.value ||
+    route.path === "/config" ||
+    route.path === "/settings",
 );
-const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginPageRoute.value);
+const isFullScreenRoute = computed(() => isCurrentChatRoute.value || isPluginViewRoute.value);
 const shouldMountChat = ref(isCurrentChatRoute.value);
 
-const showSidebar = computed(() => !isCurrentChatRoute.value);
+const { smAndDown } = useDisplay();
+const showSidebar = computed(
+  () => !isCurrentChatRoute.value || (customizer.chatNavigationInSidebar && !smAndDown.value),
+);
 
 const migrationDialog = ref<InstanceType<typeof MigrationDialog> | null>(null);
+const hasFirstNotice = ref(false);
 const showFirstNoticeDialog = ref(false);
 
 watch(isCurrentChatRoute, (isChatRoute) => {
@@ -82,15 +93,14 @@ const maybeShowFirstNotice = async () => {
   }
 
   try {
-    const response = await axios.get("/api/stat/first-notice", {
-      params: { locale: locale.value },
-    });
+    const response = await statsApi.firstNotice(locale.value);
     if (response.data.status !== "ok") {
       return;
     }
 
     const content = response.data?.data?.content;
     if (typeof content === "string" && content.trim().length > 0) {
+      hasFirstNotice.value = true;
       showFirstNoticeDialog.value = true;
       return;
     }
@@ -124,6 +134,7 @@ onMounted(() => {
       :theme="useCustomizerStore().uiTheme"
       :class="[
         customizer.fontTheme,
+        { 'sidebar-navigation-shell': customizer.chatNavigationInSidebar },
         customizer.mini_sidebar ? 'mini-sidebar' : '',
         customizer.inputBg ? 'inputWithbg' : '',
       ]"
@@ -139,13 +150,7 @@ onMounted(() => {
       />
       <VerticalSidebarVue v-if="showSidebar" />
       <VerticalHeaderVue />
-      <v-main
-        :class="{ 'chat-main': isCurrentChatRoute }"
-        :style="{
-          height: isViewportLockedRoute ? '100vh' : undefined,
-          overflow: isViewportLockedRoute ? 'hidden' : undefined,
-        }"
-      >
+      <v-main :class="{ 'chat-main': isCurrentChatRoute }">
         <v-container
           fluid
           class="page-wrapper"
@@ -155,31 +160,18 @@ onMounted(() => {
               isProviderPageRoute || isPlatformPageRoute,
             'fullscreen-container': isFullScreenRoute,
           }"
-          :style="{
-            height:
-              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
-                ? '100%'
-                : 'calc(100% - 8px)',
-            padding: isFullScreenRoute ? '0' : undefined,
-            minHeight:
-              isFullScreenRoute || isProviderPageRoute || isPlatformPageRoute
-                ? 'unset'
-                : undefined,
-          }"
         >
           <div
+            class="page-content"
+            :class="{
+              'page-content--locked': isViewportLockedRoute || isPluginViewRoute,
+            }"
             :style="{
-              height: '100%',
-              width: '100%',
-              overflow: isViewportLockedRoute ? 'hidden' : undefined,
-              position: isPluginPageRoute ? 'relative' : undefined,
+              padding: isFullScreenRoute ? '0' : undefined,
+              position: isPluginViewRoute ? 'relative' : undefined,
             }"
           >
-            <div
-              v-if="shouldMountChat"
-              v-show="isCurrentChatRoute"
-              style="height: 100%; width: 100%; overflow: hidden"
-            >
+            <div v-if="shouldMountChat" v-show="isCurrentChatRoute" style="height: 100%; width: 100%; overflow: hidden">
               <Chat :active="isCurrentChatRoute" />
             </div>
             <RouterView v-if="!isCurrentChatRoute" />
@@ -189,6 +181,7 @@ onMounted(() => {
 
       <MigrationDialog ref="migrationDialog" />
       <ReadmeDialog
+        v-if="hasFirstNotice"
         :show="showFirstNoticeDialog"
         mode="first-notice"
         @update:show="onFirstNoticeDialogUpdate"
@@ -198,20 +191,27 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.chat-mode-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
-.viewport-locked-container {
-  min-height: unset !important;
-  height: 100% !important;
-  overflow: hidden !important;
-}
-
 .chat-main {
   padding-top: 0 !important;
+}
+
+/* Keep the content offset and both drawers on the same motion curve. */
+:global(.sidebar-navigation-shell .v-main),
+:global(.sidebar-navigation-shell .v-navigation-drawer),
+:global(.sidebar-navigation-shell .app-header-context) {
+  transition:
+    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin-left 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(.sidebar-navigation-shell .v-main),
+  :global(.sidebar-navigation-shell .v-navigation-drawer),
+  :global(.sidebar-navigation-shell .app-header-context) {
+    transition: none;
+  }
 }
 
 /* The header takes its own row in the flow, so the content area owns the remaining
@@ -222,63 +222,62 @@ onMounted(() => {
   overflow: hidden;
 }
 
+/* The shell is sized with dynamic viewport units: the mobile browsers' URL/toolbar
+   area is excluded, so the bottom of the shell is never painted underneath it. */
 :global(.v-application),
 :global(.v-application__wrap) {
-  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   overflow: hidden;
 }
 
 :global(.v-main) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
+  height: calc(100dvh - var(--astrbot-toolbar-height, 42px)) !important;
   padding-top: 0 !important;
-  overflow-x: hidden !important;
-  overflow-y: auto !important;
-  scrollbar-width: none;
+  overflow: hidden !important;
   /* The document no longer scrolls; the content area does. Sticky offsets that were
      written for the document layout must be measured from the content area's own top. */
   --v-layout-top: 0px !important;
 }
 
-:global(.v-main::-webkit-scrollbar) {
+/* Keep the card frame fixed while its content scrolls inside the rounded edges. */
+:global(.page-wrapper) {
+  --astrbot-content-gap: 6px;
+  height: calc(100dvh - var(--astrbot-toolbar-height, 42px) - var(--astrbot-content-gap)) !important;
+  width: calc(100% - var(--astrbot-content-gap));
+  min-height: 0;
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+}
+
+/* Let the content fill the available width on small screens. */
+@media (max-width: 959.98px) {
+  :global(.page-wrapper) {
+    --astrbot-content-gap: 0px;
+    border-radius: 0;
+  }
+}
+
+.page-content {
+  height: 100%;
+  width: 100%;
+  padding: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.page-content::-webkit-scrollbar {
   width: 0;
   background: transparent;
 }
 
-/* The content area is the opaque card next to the sidebar. */
-:global(.page-wrapper) {
-  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-  border-top-left-radius: 12px;
-}
-
-/* On small screens there is no permanent sidebar to separate from, so the
-   card's left edge treatments would only read as stray lines. */
-@media (max-width: 959.98px) {
-  :global(.page-wrapper) {
-    border-left: 0;
-    border-top-left-radius: 0;
-  }
-}
-
-/* Off macOS the card also carries the hairline under the toolbar, so the line
-   follows the rounded corner instead of cutting across the notch. */
-:global(html:not([data-astrbot-desktop-platform='macos']) .page-wrapper) {
-  border-top: 1px solid rgba(var(--v-theme-on-surface), 0.1);
-}
-
-/* Normal pages grow with their content so the main area has something to scroll. */
-:global(.page-wrapper:not(.viewport-locked-container):not(.chat-mode-container):not(.fullscreen-container)) {
-  height: auto !important;
-  min-height: calc(100vh - var(--astrbot-toolbar-height, 40px));
-}
-
-/* Viewport-locked and full-screen pages keep a fixed height and scroll internally.
-   Clipping them keeps full-bleed children from painting outside the rounded corner. */
-:global(.viewport-locked-container),
-:global(.chat-mode-container),
-:global(.fullscreen-container) {
-  height: calc(100vh - var(--astrbot-toolbar-height, 40px)) !important;
-  overflow: hidden !important;
+/* Chat, workspace and plugin pages manage their own internal scrolling. */
+.page-content--locked {
+  overflow: hidden;
 }
 
 /* macOS desktop vibrancy: the window material shows through wherever the UI stays
@@ -286,54 +285,42 @@ onMounted(() => {
 :global(html) {
   /* Shared chrome background for the top toolbar and the sidebars, so the
      header and sidebar always read as one surface in both themes. */
-  --astrbot-chrome-bg: #fdfcfc;
+  --astrbot-chrome-bg: #f2f2f7;
 }
 
 :global(html .v-application.v-theme--BlueBusinessDarkTheme) {
   --astrbot-chrome-bg: rgb(var(--v-theme-background));
 }
 
-:global(html[data-astrbot-desktop-platform='macos']) {
-  /* Bias the native window material toward white in light mode, black in dark mode.
-     Mostly opaque so the chrome reads as light even when the material behind is dark. */
-  --astrbot-vibrancy-tint: rgba(253, 252, 252, 0.92);
+:global(html[data-astrbot-desktop-platform="macos"]) {
+  /* Preserve the shell's gray tint while letting the native window material show through. */
+  --astrbot-vibrancy-tint: rgba(242, 242, 247, 0.6);
 }
 
-:global(html[data-astrbot-desktop-platform='macos'] .v-application.v-theme--BlueBusinessDarkTheme) {
+:global(html[data-astrbot-desktop-platform="macos"] .v-application.v-theme--BlueBusinessDarkTheme) {
   --astrbot-vibrancy-tint: rgba(26, 26, 26, 0.92);
 }
 
-/* Off macOS the sidebar column is opaque; extend its color behind the content
-   card's rounded corner so the notch does not contrast with the sidebar. */
-:global(html:not([data-astrbot-desktop-platform='macos']) .v-main) {
-  background-image: linear-gradient(
-    to right,
-    rgb(var(--v-theme-surface)) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+/* Extend the sidebar surface behind every corner and the right/bottom gaps. */
+:global(html:not([data-astrbot-desktop-platform="macos"]) .v-main) {
+  background: var(--astrbot-chrome-bg) !important;
 }
 
-:global(html[data-astrbot-desktop-platform='macos']),
-:global(html[data-astrbot-desktop-platform='macos'] body),
-:global(html[data-astrbot-desktop-platform='macos'] .v-application),
-:global(html[data-astrbot-desktop-platform='macos'] .v-application__wrap) {
+:global(html[data-astrbot-desktop-platform="macos"]),
+:global(html[data-astrbot-desktop-platform="macos"] body),
+:global(html[data-astrbot-desktop-platform="macos"] .v-application),
+:global(html[data-astrbot-desktop-platform="macos"] .v-application__wrap) {
   background: transparent !important;
 }
 
-/* The sidebar tint lives on the main area's own background (behind everything), covering
-   the sidebar column plus a small overhang that reaches the content corner. */
-:global(html[data-astrbot-desktop-platform='macos'] .v-main) {
-  background: linear-gradient(
-    to right,
-    var(--astrbot-vibrancy-tint, transparent) 0 calc(var(--v-layout-left) + 12px),
-    transparent calc(var(--v-layout-left) + 12px) 100%
-  ) !important;
+/* Keep the macOS tint continuous behind the sidebar and the card gaps. */
+:global(html[data-astrbot-desktop-platform="macos"] .v-main) {
+  background: var(--astrbot-vibrancy-tint, transparent) !important;
 }
 
-/* Vuetify paints its own surface behind every list, which would sit on top of the
-   translucent sidebar, so keep the navigation lists transparent on macOS. */
-:global(html[data-astrbot-desktop-platform='macos'] .leftSidebar .v-list),
-:global(html[data-astrbot-desktop-platform='macos'] .chat-sidebar .v-list) {
+/* Navigation lists inherit the shared shell background. */
+:global(.leftSidebar .v-list),
+:global(.chat-sidebar .v-list) {
   background: transparent !important;
 }
 </style>

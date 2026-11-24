@@ -181,13 +181,13 @@
               :label="t('create.embeddingModelLabel')" variant="outlined" class="mb-4" :disabled="editingKB !== null"
               :rules="[v => editingKB !== null || !!v || t('create.embeddingModelRequired')]" required
               :hint="t('create.embeddingLockedHint')" persistent-hint>
-              <template #item="{ props, item }">
+              <template #item="{ props, internalItem: item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
                     {{
                       t("create.providerInfo", {
-                        id: item.id,
-                        dimensions: item.embedding_dimensions || "N/A",
+                        id: item.raw.id,
+                        dimensions: item.raw.embedding_dimensions || "N/A",
                       })
                     }}
                   </template>
@@ -205,10 +205,10 @@
               clearable
               class="mb-2"
             >
-              <template #item="{ props, item }">
+              <template #item="{ props, internalItem: item }">
                 <v-list-item v-bind="props">
                   <template #subtitle>
-                    {{ t("create.rerankProviderInfo", { id: item.id }) }}
+                    {{ t("create.rerankProviderInfo", { id: item.raw.id }) }}
                   </template>
                 </v-list-item>
               </template>

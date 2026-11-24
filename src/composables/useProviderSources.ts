@@ -9,7 +9,7 @@ import { loadSponsorCatalog, sponsorCatalog } from "@/utils/sponsorCatalog";
 
 export interface UseProviderSourcesOptions {
   defaultTab?: string;
-  tm: (key: string, params?: Record<string, string | number>) => string;
+  tm: (key: string, params?: Record<string, unknown>) => string;
   showMessage: (message: string, color?: string) => void;
 }
 
@@ -46,6 +46,10 @@ export function resolveDefaultTab(value?: string) {
     return "rerank";
   }
 
+  if (normalized.includes("decision")) {
+    return "decision";
+  }
+
   return "chat_completion";
 }
 
@@ -73,7 +77,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const loadingSources = ref(true);
   const loadingModels = ref(false);
   const savingSource = ref(false);
-  const savingProviderToggles = ref<string[]>([]);
   const testingProviders = ref<string[]>([]);
   const isSourceModified = ref(false);
   const configSchema = ref<Record<string, any>>({});
@@ -85,31 +88,12 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const unsavedProviderSourceMarker = Symbol("unsavedProviderSource");
 
   const providerTypes = computed(() => [
-    {
-      value: "chat_completion",
-      label: tm("providers.tabs.chatCompletion"),
-      icon: "mdi-message-text",
-    },
-    {
-      value: "speech_to_text",
-      label: tm("providers.tabs.speechToText"),
-      icon: "mdi-microphone-message",
-    },
-    {
-      value: "text_to_speech",
-      label: tm("providers.tabs.textToSpeech"),
-      icon: "mdi-volume-high",
-    },
-    {
-      value: "embedding",
-      label: tm("providers.tabs.embedding"),
-      icon: "mdi-code-json",
-    },
-    {
-      value: "rerank",
-      label: tm("providers.tabs.rerank"),
-      icon: "mdi-compare-vertical",
-    },
+    { value: "chat_completion", label: tm("providers.tabs.chatCompletion"), icon: "mdi-message-text" },
+    { value: "speech_to_text", label: tm("providers.tabs.speechToText"), icon: "mdi-microphone-message" },
+    { value: "text_to_speech", label: tm("providers.tabs.textToSpeech"), icon: "mdi-volume-high" },
+    { value: "decision", label: tm("providers.tabs.decision"), icon: "mdi-scale-balance" },
+    { value: "embedding", label: tm("providers.tabs.embedding"), icon: "mdi-code-json" },
+    { value: "rerank", label: tm("providers.tabs.rerank"), icon: "mdi-compare-vertical" },
   ]);
 
   // ===== Computed =====
@@ -203,10 +187,17 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   const mergedModelEntries = computed(() => {
     const configuredEntries = (sourceProviders.value || []).map((provider: any) => {
       const metadata = getModelMetadata(provider.model);
+      let displayMetadata = metadata || buildMetadataFromProvider(provider);
+      if (provider.max_context_tokens > 0) {
+        displayMetadata = {
+          ...displayMetadata,
+          limit: { ...displayMetadata?.limit, context: provider.max_context_tokens },
+        };
+      }
       return {
         type: "configured",
         provider,
-        metadata: metadata || buildMetadataFromProvider(provider),
+        metadata: displayMetadata,
         hasModelMetadata: Boolean(metadata),
       };
     });
@@ -363,7 +354,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
 
   function getModelMetadata(modelName?: string) {
     if (!modelName) return null;
-    return modelMetadata.value?.[modelName] || null;
+    // Schema refreshes only include configured models; retain fetched candidate metadata.
+    const availableModel = availableModels.value.find((item) => item?.name === modelName);
+    return availableModel?.metadata || modelMetadata.value?.[modelName] || null;
   }
 
   function buildMetadataFromProvider(provider: ProviderMetadataSource): ProviderModelMetadata {
@@ -430,6 +423,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       azure_tts: "text_to_speech",
       minimax_tts_api: "text_to_speech",
       volcengine_tts: "text_to_speech",
+      system_one_decision: "decision",
+      openai_decision: "decision",
     };
     return oldVersionProviderTypeMapping[provider.type];
   }
@@ -448,7 +443,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       suppressSourceWatch = false;
     });
     availableModels.value = [];
-    modelMetadata.value = {};
     isSourceModified.value = false;
   }
 
@@ -553,8 +547,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     }
 
     try {
-      const response = await providerApi.deleteSource(sourceId);
-      if (response.data.status !== "ok") throw new Error(response.data.message || tm("providerSources.deleteError"));
+      await providerApi.deleteSource(sourceId);
       removeProviderSourceFromLocalState(sourceId);
       showMessage(tm("providerSources.deleteSuccess"));
     } catch (error: any) {
@@ -574,7 +567,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const response = await providerApi.upsertSource(String(originalId), editableProviderSource.value);
 
       if (response.data.status !== "ok") {
-        throw new Error(response.data.message || tm("providerSources.saveError"));
+        throw new Error(response.data.message ?? undefined);
       }
 
       if (editableProviderSource.value!.id !== originalId) {
@@ -624,8 +617,8 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       const sourceId = editableProviderSource.value?.id || selectedProviderSource.value.id;
       const response = await providerApi.sourceModels(String(sourceId));
       if (response.data.status === "ok") {
-        const metadataMap = response.data.data.model_metadata || {};
-        modelMetadata.value = metadataMap;
+        const metadataMap = (response.data.data.model_metadata || {}) as Record<string, ProviderModelMetadata>;
+        modelMetadata.value = { ...modelMetadata.value, ...metadataMap };
         availableModels.value = (response.data.data.models || []).map((model: string) => ({
           name: model,
           metadata: metadataMap?.[model] || null,
@@ -634,10 +627,9 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
           showMessage(tm("models.noModelsFound"), "info");
         }
       } else {
-        throw new Error(response.data.message || tm("providerSources.saveError"));
+        throw new Error(response.data.message ?? undefined);
       }
     } catch (error: any) {
-      modelMetadata.value = {};
       showMessage(error.response?.data?.message || error.message || tm("models.fetchError"), "error");
     } finally {
       loadingModels.value = false;
@@ -691,7 +683,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     try {
       const res = await providerApi.createInSource(String(newProvider.provider_source_id), newProvider);
       if (res.data.status === "error") {
-        throw new Error(res.data.message || tm("providerSources.saveError"));
+        throw new Error(res.data.message ?? undefined);
       }
       providers.value.push(newProvider);
       showMessage(res.data.message || tm("models.addSuccess", { model: modelName }));
@@ -711,8 +703,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     if (!confirmed) return false;
 
     try {
-      const response = await providerApi.delete(String(provider.id));
-      if (response.data.status !== "ok") throw new Error(response.data.message || tm("models.deleteError"));
+      await providerApi.delete(String(provider.id));
       providers.value = providers.value.filter((p) => p.id !== provider.id);
       showMessage(tm("models.deleteSuccess"));
       return true;
@@ -721,26 +712,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
       return false;
     } finally {
       await loadConfig();
-    }
-  }
-
-  async function toggleProviderEnable(provider: { id: string; enable?: boolean }, value: boolean) {
-    if (!provider.id || savingProviderToggles.value.includes(provider.id)) return false;
-    savingProviderToggles.value.push(provider.id);
-    try {
-      const response = await providerApi.setEnabled(provider.id, {
-        enabled: value,
-      });
-      if (response.data.status !== "ok") throw new Error(response.data.message || tm("providerSources.saveError"));
-      provider.enable = value;
-      showMessage(response.data.message || tm("messages.success.statusUpdate"));
-      return true;
-    } catch (error) {
-      showMessage(error instanceof Error ? error.message : tm("providerSources.saveError"), "error");
-      return false;
-    } finally {
-      await loadConfig();
-      savingProviderToggles.value = savingProviderToggles.value.filter((id) => id !== provider.id);
     }
   }
 
@@ -763,14 +734,13 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
   }
 
   async function loadConfig() {
-    await loadProviderTemplate();
+    loadProviderTemplate();
   }
 
   async function loadProviderTemplate() {
     loadingSources.value = true;
     try {
       const response = await providerApi.schema();
-      if (response.data.status !== "ok") throw new Error(response.data.message || tm("providerSources.loadError"));
       if (response.data.status === "ok") {
         configSchema.value = response.data.data.config_schema || {};
         if (configSchema.value.provider?.config_template) {
@@ -781,8 +751,7 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
         providers.value = response.data.data.providers || [];
       }
     } catch (error) {
-      console.error("Failed to load provider template:", error);
-      showMessage(error instanceof Error ? error.message : tm("providerSources.loadError"), "error");
+      console.warn("Failed to load provider template:", error);
     } finally {
       loadingSources.value = false;
     }
@@ -812,7 +781,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     loadingSources,
     loadingModels,
     savingSource,
-    savingProviderToggles,
     testingProviders,
     isSourceModified,
     configSchema,
@@ -857,7 +825,6 @@ export function useProviderSources(options: UseProviderSourcesOptions) {
     addModelProvider,
     deleteProvider,
     modelAlreadyConfigured,
-    toggleProviderEnable,
     testProvider,
     loadConfig,
     loadProviderTemplate,

@@ -13,7 +13,8 @@
     "addDialogPair": "会話ペアを追加",
     "export": "エクスポート",
     "import": "ペルソナをインポート",
-    "more": "その他の操作"
+    "more": "その他の操作",
+    "clone": "複製"
   },
   "labels": {
     "presetDialogs": "プリセット会話（{count} 組）",
@@ -103,11 +104,16 @@
     "toolsCount": "個のツール",
     "skillsCount": "個のスキル",
     "contextMenu": {
-      "moveTo": "移動先…"
+      "moveTo": "移動先…",
+      "export": "エクスポート"
     },
     "messages": {
       "moveSuccess": "ペルソナを移動しました",
-      "moveError": "ペルソナの移動に失敗しました"
+      "moveError": "ペルソナの移動に失敗しました",
+      "exportError": "ペルソナをエクスポートできませんでした",
+      "exportSuccess": "エクスポートしました（スキルとツールは含まれません）",
+      "importError": "ペルソナをインポートできませんでした",
+      "importNetworkError": "サーバーから応答がありません。ネットワーク接続を確認してください。"
     }
   },
   "folder": {
@@ -156,5 +162,16 @@
     "description": "「{name}」の移動先フォルダーを選択してください",
     "success": "移動しました",
     "error": "移動に失敗しました"
+  },
+  "cloneDialog": {
+    "description": "「{name}」のコピーを新しい ID で作成します",
+    "error": "ペルソナを複製できませんでした",
+    "newPersonaId": "新しいペルソナ ID",
+    "newPersonaIdHint": "複製したペルソナの一意の名前を入力してください",
+    "success": "ペルソナを複製しました",
+    "title": "ペルソナを複製",
+    "validation": {
+      "required": "ペルソナ ID を入力してください"
+    }
   }
 }

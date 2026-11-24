@@ -1,165 +1,54 @@
-import axios, { type AxiosError, axiosStatic, type InternalAxiosRequestConfig, resolveApiUrl } from "@/utils/request";
+import httpClient, { apiV1Client, axiosStatic, getApiBaseUrl, getApiRequestPath, resolveApiUrl } from "@/utils/request";
 
-const AUTH_HEADER = "Authorization";
-const LOCALE_HEADER = "Accept-Language";
+export { apiV1Client, httpClient };
+
+// Generated clients require AxiosStatic, but dispatch must retain the selected
+// backend and the configured instance's request/response interceptors.
+export const openApiAxios = new Proxy(axiosStatic, {
+  apply(_target, _thisArg, args) {
+    return Reflect.apply(httpClient, httpClient, args);
+  },
+});
 
 let configured = false;
 let originalFetch: typeof window.fetch | null = null;
 
-export const httpClient = axios;
-// The generated SDK expects AxiosStatic, while dashboard requests use an instance.
-// Keep the static helpers available and forward calls through the configured client.
-export const generatedHttpClient = new Proxy(axiosStatic, {
-  apply(_target, _thisArg, args) {
-    return httpClient(args[0]);
-  },
-});
-export const apiV1Client = axios.create({ timeout: 10000 });
-apiV1Client.interceptors.request.use((config) => {
-  config.baseURL = resolveApiUrl("/api/v1");
-  return attachAxiosHeaders(config);
-});
-apiV1Client.interceptors.response.use((response) => response, normalizeAxiosError);
-
-function getBackendOrigin(): string {
-  return new URL(resolveApiUrl("/api/"), window.location.href).origin;
-}
-
-function getToken(): string | null {
-  return localStorage.getItem("token");
-}
-
-function getLocale(): string | null {
-  return localStorage.getItem("astrbot-locale");
-}
-
-function setAxiosHeader(headers: InternalAxiosRequestConfig["headers"], key: string, value: string) {
-  if (typeof headers.set === "function") {
-    headers.set(key, value);
-    return;
-  }
-  headers[key] = value;
-}
-
-function attachAxiosHeaders(config: InternalAxiosRequestConfig) {
-  // Dashboard credentials must not be attached to third-party requests.
-  try {
-    const requestUrl = new URL(axios.getUri(config), window.location.href);
-    if (requestUrl.origin !== getBackendOrigin()) return config;
-  } catch {
-    return config;
-  }
-
-  const token = getToken();
-  if (token) {
-    setAxiosHeader(config.headers, AUTH_HEADER, `Bearer ${token}`);
-  }
-
-  const locale = getLocale();
-  if (locale) {
-    setAxiosHeader(config.headers, LOCALE_HEADER, locale);
-  }
-
-  return config;
-}
-
-function normalizeAxiosError(error: AxiosError) {
-  if (error.response?.status === 401) {
-    let requestPath = "";
-    try {
-      const url = error.config?.url || "";
-      const baseURL = error.config?.baseURL;
-      const resolvedUrl =
-        url && baseURL && !/^([a-z][a-z\d+\-.]*:)?\/\//i.test(url)
-          ? `${baseURL.replace(/\/+$/, "")}/${url.replace(/^\/+/, "")}`
-          : url;
-      const requestUrl = new URL(resolvedUrl || "/", window.location.origin);
-      if (requestUrl.origin === getBackendOrigin()) {
-        requestPath = requestUrl.pathname.match(/\/api\/.*/)?.[0] || requestUrl.pathname;
-      }
-    } catch {
-      requestPath = "";
-    }
-
-    const isAuthChallenge =
-      [
-        "/api/auth/login",
-        "/api/auth/setup",
-        "/api/auth/setup-status",
-        "/api/v1/auth/login",
-        "/api/v1/auth/setup",
-        "/api/v1/auth/setup-status",
-      ].includes(requestPath) ||
-      Boolean((error.response.data as { data?: { totp_required?: boolean } } | undefined)?.data?.totp_required);
-
-    if (requestPath.startsWith("/api/") && !isAuthChallenge) {
-      ["user", "token", "change_pwd_hint", "legacy_pwd_hint", "md5_pwd_hint", "password_upgrade_required"].forEach(
-        (key) => localStorage.removeItem(key),
-      );
-
-      if (!window.location.hash.startsWith("#/auth/login")) {
-        window.location.hash = "/auth/login";
-      }
-    }
-  }
-
-  if (error.response?.status === 429) {
-    const data = error.response.data as { message?: string } | undefined;
-    if (data?.message) {
-      return Promise.reject(data.message);
-    }
-  }
-  return Promise.reject(error);
-}
-
 export function fetchWithAuth(input: RequestInfo | URL, init?: RequestInit) {
   const fetchImpl = originalFetch ?? window.fetch.bind(window);
   let resolvedInput = input;
-  if (typeof input === "string" && input.startsWith("/api/")) {
-    resolvedInput = resolveApiUrl(input);
-  }
-  // The global fetch wrapper also handles public, cross-origin resources.
+  let requestUrl: URL;
   try {
-    const requestUrl = new URL(
-      resolvedInput instanceof Request ? resolvedInput.url : resolvedInput,
-      window.location.href,
-    );
-    if (requestUrl.origin !== getBackendOrigin()) {
-      return fetchImpl(resolvedInput, init);
+    requestUrl = new URL(input instanceof Request ? input.url : input, window.location.href);
+    if (getApiBaseUrl() && requestUrl.origin === window.location.origin && /^\/api(?:\/|$)/.test(requestUrl.pathname)) {
+      const targetUrl = resolveApiUrl(requestUrl.pathname + requestUrl.search);
+      requestUrl = new URL(targetUrl, window.location.href);
+      resolvedInput = input instanceof Request ? new Request(requestUrl.href, input) : targetUrl;
     }
   } catch {
+    return fetchImpl(input, init);
+  }
+
+  // Only the configured dashboard API receives dashboard credentials.
+  if (getApiRequestPath(requestUrl.href) === null) {
     return fetchImpl(resolvedInput, init);
   }
 
-  const token = getToken();
-  const locale = getLocale();
-
-  if (!token && !locale) {
-    return fetchImpl(resolvedInput, init);
+  const requestHeaders = resolvedInput instanceof Request ? resolvedInput.headers : undefined;
+  const headers = new Headers(init?.headers ?? requestHeaders);
+  const token = localStorage.getItem("token");
+  const locale = localStorage.getItem("astrbot-locale");
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
   }
-
-  const requestHeaders = typeof input !== "string" && "headers" in input ? (input as Request).headers : undefined;
-  const headers = new Headers(init?.headers || requestHeaders);
-
-  if (token && !headers.has(AUTH_HEADER)) {
-    headers.set(AUTH_HEADER, `Bearer ${token}`);
+  if (locale && !headers.has("Accept-Language")) {
+    headers.set("Accept-Language", locale);
   }
-  if (locale && !headers.has(LOCALE_HEADER)) {
-    headers.set(LOCALE_HEADER, locale);
-  }
-
   return fetchImpl(resolvedInput, { ...init, headers });
 }
 
 export function setupHttpClient() {
-  if (configured) {
-    return;
-  }
-
-  httpClient.interceptors.response.use((response) => response, normalizeAxiosError);
-
+  if (configured) return;
   originalFetch = window.fetch.bind(window);
   window.fetch = fetchWithAuth;
-
   configured = true;
 }

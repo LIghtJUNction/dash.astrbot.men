@@ -24,10 +24,7 @@
         />
       </div>
 
-      <div
-        v-if="filteredPluginList.length > 0"
-        class="inline-plugin-selector__list"
-      >
+      <div v-if="filteredPluginList.length > 0" class="inline-plugin-selector__list">
         <div
           v-for="plugin in filteredPluginList"
           :key="plugin.name"
@@ -36,21 +33,13 @@
         >
           <div class="inline-plugin-card__body">
             <div class="inline-plugin-card__title-row">
-              <span class="inline-plugin-card__title">{{
-                pluginDisplayName(plugin)
-              }}</span>
+              <span class="inline-plugin-card__title">{{ pluginDisplayName(plugin) }}</span>
               <span v-if="plugin.reserved" class="inline-plugin-card__preset">
-                {{ tm("pluginSetSelector.preset") }}
+                {{ tm('pluginSetSelector.preset') }}
               </span>
             </div>
-            <div
-              class="inline-plugin-card__description"
-              :title="pluginDescription(plugin)"
-            >
-              {{
-                pluginDescription(plugin) ||
-                tm("pluginSetSelector.noDescription")
-              }}
+            <div class="inline-plugin-card__description" :title="pluginDescription(plugin)">
+              {{ pluginDescription(plugin) || tm('pluginSetSelector.noDescription') }}
             </div>
           </div>
 
@@ -65,18 +54,15 @@
         </div>
       </div>
 
-      <div
-        v-else
-        class="inline-plugin-selector__empty inline-plugin-selector__empty--search"
-      >
+      <div v-else class="inline-plugin-selector__empty inline-plugin-selector__empty--search">
         <v-icon size="38">mdi-magnify-close</v-icon>
-        <span>{{ tm("pluginSetSelector.noSearchResults") }}</span>
+        <span>{{ tm('pluginSetSelector.noSearchResults') }}</span>
       </div>
     </template>
 
     <div v-else class="inline-plugin-selector__empty">
       <v-icon size="38">mdi-puzzle-outline</v-icon>
-      <span>{{ tm("pluginSetSelector.noPlugins") }}</span>
+      <span>{{ tm('pluginSetSelector.noPlugins') }}</span>
     </div>
   </div>
 
@@ -84,11 +70,8 @@
     <!-- 顶部操作区域 -->
     <div class="d-flex align-center justify-space-between mb-2">
       <div class="flex-grow-1">
-        <span
-          v-if="!modelValue || modelValue.length === 0"
-          style="color: rgb(var(--v-theme-primaryText))"
-        >
-          {{ tm("pluginSetSelector.notSelected") }}
+        <span v-if="!modelValue || modelValue.length === 0" style="color: rgb(var(--v-theme-primaryText));">
+          {{ selectionOnly ? configTm('overrides.emptyValue') : tm('pluginSetSelector.notSelected') }}
         </span>
         <span
           v-else-if="isAllPlugins"
@@ -120,7 +103,7 @@
 
         <div v-if="!loading">
           <!-- 预设选项 -->
-          <v-radio-group v-model="selectionMode" class="mb-4" hide-details>
+          <v-radio-group v-if="!selectionOnly" v-model="selectionMode" class="mb-4" hide-details>
             <v-radio
               value="all"
               :label="tm('pluginSetSelector.enableAll')"
@@ -139,10 +122,7 @@
           </v-radio-group>
 
           <!-- 自定义选择时显示插件列表 -->
-          <div
-            v-if="selectionMode === 'custom'"
-            style="max-height: 300px; overflow-y: auto"
-          >
+          <div v-if="selectionOnly || selectionMode === 'custom'" style="max-height: 300px; overflow-y: auto;">
             <v-list v-if="pluginList.length > 0" density="compact">
               <v-list-item
                 v-for="plugin in pluginList"
@@ -158,20 +138,10 @@
                     hide-details
                   />
                 </template>
-                <v-list-item-title>{{
-                  pluginDisplayName(plugin)
-                }}</v-list-item-title>
+                <v-list-item-title>{{ pluginDisplayName(plugin) }}</v-list-item-title>
                 <v-list-item-subtitle>
-                  {{
-                    pluginDescription(plugin) ||
-                    tm("pluginSetSelector.noDescription")
-                  }}
-                  <v-chip
-                    v-if="!plugin.activated"
-                    size="x-small"
-                    color="grey"
-                    class="ml-1"
-                  >
+                  {{ pluginDescription(plugin) || tm("pluginSetSelector.noDescription") }}
+                  <v-chip v-if="!plugin.activated" size="x-small" color="grey" class="ml-1">
                     {{ tm("pluginSetSelector.notActivated") }}
                   </v-chip>
                 </v-list-item-subtitle>
@@ -208,14 +178,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, type PropType, ref, watch } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
 
 const props = defineProps({
+  selectionOnly: { type: Boolean, default: false },
   modelValue: {
-    type: Array as PropType<string[]>,
+    type: Array,
     default: () => [],
   },
   buttonText: {
@@ -236,15 +207,16 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
+const emit = defineEmits(["update:modelValue"]);
 const { tm } = useModuleI18n("core.shared");
+const { tm: configTm } = useModuleI18n("features.config");
 const { pluginName, pluginDesc } = usePluginI18n();
 
 interface PluginEntry {
   name: string;
   desc?: string;
-  activated?: boolean;
-  reserved?: boolean;
+  activated: boolean;
+  reserved: boolean;
 }
 
 const dialog = ref(false);
@@ -303,7 +275,7 @@ function removePlugin(pluginName: string) {
 // 监听 modelValue 变化，同步内部状态
 watch(
   () => props.modelValue,
-  (newValue: string[]) => {
+  (newValue: unknown[]) => {
     if (!newValue || newValue.length === 0) {
       selectionMode.value = "none";
       selectedPlugins.value = [];
@@ -312,7 +284,7 @@ watch(
       selectedPlugins.value = [];
     } else {
       selectionMode.value = "custom";
-      selectedPlugins.value = [...newValue];
+      selectedPlugins.value = [...newValue] as string[];
     }
   },
   { immediate: true },
@@ -379,7 +351,7 @@ onMounted(() => {
 function confirmSelection() {
   let newValue: string[] = [];
 
-  switch (selectionMode.value) {
+  switch (props.selectionOnly ? "custom" : selectionMode.value) {
     case "all":
       newValue = ["*"];
       break;
@@ -406,7 +378,7 @@ function cancelSelection() {
     selectedPlugins.value = [];
   } else {
     selectionMode.value = "custom";
-    selectedPlugins.value = [...currentValue];
+    selectedPlugins.value = [...currentValue] as string[];
   }
 
   dialog.value = false;

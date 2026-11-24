@@ -1,9 +1,7 @@
 <template>
   <div class="stats-page" :class="{ 'is-dark': isDark }">
     <v-container fluid class="stats-shell pa-4 pa-md-6">
-      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4">
-        {{ errorMessage }}
-      </v-alert>
+      <v-alert v-if="errorMessage" type="error" variant="tonal" class="mb-4"> {{ errorMessage }} </v-alert>
 
       <div v-if="loading && !baseStats" class="loading-wrap">
         <v-progress-circular indeterminate color="grey-darken-1" />
@@ -11,23 +9,15 @@
 
       <template v-else>
         <div class="overview-grid">
-          <section
-            v-for="card in overviewCards"
-            :key="card.label"
-            class="stat-card overview-card"
-          >
-            <div class="card-icon">
-              <v-icon size="88">{{ card.icon }}</v-icon>
-            </div>
+          <section v-for="card in overviewCards" :key="card.label" class="stat-card overview-card">
+            <div class="card-icon"> <v-icon size="88">{{ card.icon }}</v-icon> </div>
             <div class="card-label">{{ card.label }}</div>
             <div class="card-value">{{ card.value }}</div>
           </section>
         </div>
 
         <div class="section-toolbar">
-          <div>
-            <div class="section-title">{{ t("messageOverview.title") }}</div>
-          </div>
+          <div> <div class="section-title">{{ t('messageOverview.title') }}</div> </div>
           <div class="range-switch">
             <button
               v-for="option in rangeOptions"
@@ -45,111 +35,72 @@
         <div class="panel-grid">
           <section class="stat-card chart-card chart-card-wide">
             <div class="card-head">
-              <div>
-                <div class="section-title">{{ t("messageTrend.title") }}</div>
-              </div>
+              <div> <div class="section-title">{{ t('messageTrend.title') }}</div> </div>
               <div class="card-head-actions">
                 <div class="section-metric">
-                  <span class="metric-label">{{
-                    t("messageTrend.totalMessages")
-                  }}</span>
-                  <span class="metric-value">{{
-                    formatNumber(baseStats?.message_count ?? 0)
-                  }}</span>
+                  <span class="metric-label">{{ t('messageTrend.totalMessages') }}</span>
+                  <span class="metric-value">{{ formatNumber(baseStats?.message_count ?? 0) }}</span>
                 </div>
               </div>
             </div>
-            <apexchart
-              type="area"
-              height="320"
-              :options="messageChartOptions"
-              :series="messageChartSeries"
-            />
+            <VueApexCharts type="area" height="320" :options="messageChartOptions" :series="messageChartSeries" />
           </section>
 
           <section class="stat-card provider-list-card">
             <div class="card-head compact">
-              <div>
-                <div class="section-title">{{ t("platformRanking.title") }}</div>
-              </div>
+              <div> <div class="section-title">{{ t('platformRanking.title') }}</div> </div>
             </div>
             <div v-if="platformRanking.length" class="provider-list">
-              <div
-                v-for="platform in platformRanking"
-                :key="platform.name"
-                class="provider-row"
-              >
+              <div v-for="platform in platformRanking" :key="platform.name" class="provider-row">
                 <div class="provider-identity">
-                  <img
-                    v-if="platform.icon"
-                    :src="platform.icon"
-                    alt=""
-                    class="platform-icon"
-                  />
+                  <img v-if="platform.icon" :src="platform.icon" alt="" class="platform-icon">
                   <MessageCircle v-else :size="18" aria-hidden="true" />
                   <span class="provider-name">{{ platform.name }}</span>
                 </div>
                 <strong>{{ formatNumber(platform.count) }}</strong>
               </div>
             </div>
-            <div v-else class="empty-state">{{ t("empty.platformStats") }}</div>
+            <div v-else class="empty-state">{{ t('empty.platformStats') }}</div>
           </section>
         </div>
 
         <div class="token-section-head">
-          <div>
-            <div class="section-title">{{ t("modelCalls.title") }}</div>
-          </div>
+          <div> <div class="section-title">{{ t('modelCalls.title') }}</div> </div>
         </div>
 
         <div class="token-grid">
-          <section
-            class="stat-card chart-card chart-card-wide provider-trend-card"
-          >
+          <section class="stat-card chart-card chart-card-wide provider-trend-card">
             <div class="card-head">
-              <div>
-                <div class="section-title">{{ t("modelTrend.title") }}</div>
-              </div>
+              <div> <div class="section-title">{{ t('modelTrend.title') }}</div> </div>
             </div>
-            <apexchart
-              type="bar"
-              height="420"
-              :options="providerChartOptions"
-              :series="providerTrendSeries"
-            />
+            <VueApexCharts type="bar" height="420" :options="providerChartOptions" :series="providerTrendSeries" />
           </section>
 
           <section class="token-side-column">
             <section class="stat-card token-total-card">
-              <div class="card-label">
-                {{ t("modelTotal.title", { range: rangeLabel }) }}
-              </div>
-              <div class="token-total-value">
-                {{ formatNumber(providerStats?.range_total_tokens ?? 0) }}
-                <span style="font-size: 18px">{{ t("units.tokens") }}</span>
-              </div>
-              <div class="card-note">
-                {{
-                  t("modelTotal.callCount", {
-                    count: formatNumber(providerStats?.range_total_calls ?? 0),
-                  })
-                }}
-              </div>
+              <div class="card-label">{{ t('modelTotal.title', { range: rangeLabel }) }}</div>
+              <div class="token-total-value"
+                >{{ formatNumber(providerStats?.range_total_tokens ?? 0) }}
+                <span style="font-size: 18px;">{{ t('units.tokens') }}</span></div
+              >
+              <div class="card-note"
+                >{{ t('modelTotal.callCount', { count: formatNumber(providerStats?.range_total_calls ?? 0) }) }}</div
+              >
               <div class="token-meta-list">
                 <div class="token-meta-item">
-                  <span>{{ t("modelTotal.avgTtft") }}</span>
+                  <span>{{ t('modelTotal.avgTtft') }}</span>
                   <strong>{{ rangeAvgTtftLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t("modelTotal.avgDuration") }}</span>
+                  <span>{{ t('modelTotal.avgDuration') }}</span>
                   <strong>{{ rangeAvgDurationLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t("modelTotal.avgTpm") }}</span>
+                  <span>{{ t('modelTotal.avgTpm') }}</span>
                   <strong>{{ rangeAvgTpmLabel }}</strong>
                 </div>
                 <div class="token-meta-item">
-                  <span>{{ t("modelTotal.successRate") }}</span>
+                  <span>{{ t('modelTotal.successRate') }}</span>
                   <strong>{{ rangeSuccessRateLabel }}</strong>
                 </div>
               </div>
@@ -157,62 +108,31 @@
 
             <section class="stat-card provider-list-card">
               <div class="card-head compact">
-                <div>
-                  <div class="section-title">{{ t("modelRanking.title") }}</div>
-                </div>
+                <div> <div class="section-title">{{ t('modelRanking.title') }}</div> </div>
               </div>
-              <div
-                v-if="rangeProviderRanking.length"
-                class="provider-list provider-list--scrollable"
-              >
-                <div
-                  v-for="provider in rangeProviderRanking"
-                  :key="provider.provider_id"
-                  class="provider-row"
-                >
+              <div v-if="rangeProviderRanking.length" class="provider-list provider-list--scrollable">
+                <div v-for="provider in rangeProviderRanking" :key="provider.provider_id" class="provider-row">
                   <span class="provider-name">{{ provider.provider_id }}</span>
                   <strong>{{ formatNumber(provider.tokens) }}</strong>
                 </div>
               </div>
-              <div v-else class="empty-state">
-                {{ t("empty.modelCalls", { range: rangeLabel }) }}
-              </div>
+              <div v-else class="empty-state">{{ t('empty.modelCalls', { range: rangeLabel }) }}</div>
             </section>
           </section>
         </div>
 
         <section class="stat-card provider-list-card">
           <div class="card-head compact">
-            <div>
-              <div class="section-title">{{ t("sessionRanking.title", { range: rangeLabel }) }}</div>
-            </div>
+            <div> <div class="section-title">{{ t('sessionRanking.title', { range: rangeLabel }) }}</div> </div>
           </div>
           <div v-if="rangeUmoRanking.length" class="provider-list">
-            <div
-              v-for="item in rangeUmoRanking"
-              :key="item.umo"
-              class="provider-row"
-            >
+            <div v-for="item in rangeUmoRanking" :key="item.umo" class="provider-row">
               <div class="provider-identity provider-identity--umo">
-                <img
-                  v-if="item.icon"
-                  :src="item.icon"
-                  alt=""
-                  class="platform-icon"
-                />
+                <img v-if="item.icon" :src="item.icon" alt="" class="platform-icon">
                 <MessageCircle v-else :size="18" aria-hidden="true" />
-                <v-tooltip
-                  v-if="item.display_name && item.display_name !== item.umo"
-                  location="top"
-                  max-width="520"
-                >
+                <v-tooltip v-if="item.display_name && item.display_name !== item.umo" location="top" max-width="520">
                   <template #activator="{ props }">
-                    <span
-                      v-bind="props"
-                      class="provider-name provider-name--alias"
-                    >
-                      {{ item.display_name }}
-                    </span>
+                    <span v-bind="props" class="provider-name provider-name--alias"> {{ item.display_name }} </span>
                   </template>
                   <span class="umo-tooltip">{{ item.umo }}</span>
                 </v-tooltip>
@@ -258,9 +178,7 @@
               <strong>{{ formatNumber(item.tokens) }}</strong>
             </div>
           </div>
-          <div v-else class="empty-state">
-            {{ t("empty.sessionCalls", { range: rangeLabel }) }}
-          </div>
+          <div v-else class="empty-state">{{ t('empty.sessionCalls', { range: rangeLabel }) }}</div>
         </section>
       </template>
     </v-container>
@@ -272,11 +190,12 @@ import { Check, Copy, MessageCircle, MessageSquareText } from "@lucide/vue";
 import type { ApexOptions } from "apexcharts";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
+import VueApexCharts from "vue3-apexcharts";
 import { useTheme } from "vuetify";
+import { statsApi } from "@/api/v1";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
 import { getPlatformIcon } from "@/utils/platformUtils";
-import axios from "@/utils/request";
 
 type TokenRange = 1 | 3 | 7;
 type ChartSeries = Array<{
@@ -470,20 +389,12 @@ function aggregateOverflowSeries(series: ProviderTrendItem[]): ProviderTrendItem
 }
 
 async function fetchBaseStats(): Promise<void> {
-  const response = await axios.get("/api/stat/get", {
-    params: {
-      offset_sec: selectedRange.value * 24 * 60 * 60,
-    },
-  });
+  const response = await statsApi.get(selectedRange.value * 24 * 60 * 60, "messages,process,instances");
   baseStats.value = response.data.data;
 }
 
 async function fetchProviderStats(): Promise<void> {
-  const response = await axios.get("/api/stat/provider-tokens", {
-    params: {
-      days: selectedRange.value,
-    },
-  });
+  const response = await statsApi.providerTokens(selectedRange.value);
   providerStats.value = response.data.data;
 }
 
@@ -603,11 +514,18 @@ const platformRanking = computed(() =>
     })),
 );
 
-const providerChartColors = computed(() =>
-  isDark.value
-    ? ["#6F8FAF", "#7E9A73", "#A78468", "#8A78A8", "#6B9995", "#B07A87", "#8C8F62", "#7C8798"]
-    : ["#5F7E9B", "#708865", "#9A7557", "#786696", "#5D8985", "#9C6674", "#80844F", "#69788D"],
-);
+const providerChartColors = [
+  "#008FFB",
+  "#00C49F",
+  "#FEB019",
+  "#FF6B45",
+  "#775DD0",
+  "#8BC34A",
+  "#D65AD1",
+  "#2ED5C4",
+  "#FF5CA8",
+  "#2E7D32",
+];
 
 const messageChartOptions = computed<ApexOptions>(() => ({
   chart: {
@@ -639,12 +557,8 @@ const messageChartOptions = computed<ApexOptions>(() => ({
       datetimeUTC: false,
       style: { colors: themePalette.value.mutedText },
     },
-    axisBorder: {
-      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
-    },
-    axisTicks: {
-      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
-    },
+    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
+    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
   },
   yaxis: {
     labels: {
@@ -679,7 +593,7 @@ const providerChartOptions = computed<ApexOptions>(() => ({
       columnWidth: "58%",
     },
   },
-  colors: providerChartColors.value,
+  colors: providerChartColors,
   dataLabels: { enabled: false },
   grid: {
     borderColor: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
@@ -690,12 +604,8 @@ const providerChartOptions = computed<ApexOptions>(() => ({
       datetimeUTC: false,
       style: { colors: themePalette.value.mutedText },
     },
-    axisBorder: {
-      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
-    },
-    axisTicks: {
-      color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26),
-    },
+    axisBorder: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
+    axisTicks: { color: hexToRgba(themePalette.value.border, isDark.value ? 0.4 : 0.26) },
   },
   yaxis: {
     labels: {
@@ -755,66 +665,35 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .stats-page {
-  --stats-page-bg: transparent;
-  --stats-panel-bg: rgba(var(--v-theme-surface), 0.78);
-  --stats-card-bg: rgba(var(--v-theme-surface), 0.9);
-  --stats-card: var(--stats-card-bg);
-  --stats-surface: rgba(var(--v-theme-surface), 0.9);
+  --stats-bg: rgb(var(--v-theme-background));
+  --stats-surface: rgb(var(--v-theme-surface));
+  --stats-card: #f5f6f7;
   --stats-text: rgb(var(--v-theme-on-surface));
-  --stats-muted: rgba(var(--v-theme-on-surface), 0.7);
-  --stats-subtle: rgba(var(--v-theme-on-surface), 0.54);
-  --stats-border: rgba(var(--v-theme-borderLight), 0.22);
-  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.4);
+  --stats-muted: rgba(var(--v-theme-on-surface), 0.68);
+  --stats-subtle: rgba(var(--v-theme-on-surface), 0.56);
+  --stats-border: rgba(var(--v-theme-on-surface), 0.1);
+  --stats-border-strong: rgba(var(--v-theme-on-surface), 0.14);
   --stats-soft: rgba(var(--v-theme-primary), 0.08);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.14);
-  --stats-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-
-  display: flex;
-  flex-direction: column;
-  height: 100%;
   min-height: 100%;
-  position: relative;
-  z-index: 1;
-  isolation: isolate;
-  background: var(--stats-page-bg);
-  padding: 16px;
-}
-
-:global(.v-theme--bluebusinessdarktheme) .stats-page {
-  --stats-panel-bg: rgba(var(--v-theme-surface), 0.72);
-  --stats-card-bg: rgba(var(--v-theme-surface-variant), 0.74);
-  --stats-surface: rgba(var(--v-theme-surface-variant), 0.74);
-  --stats-border: rgba(var(--v-theme-borderLight), 0.46);
-  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.66);
-  --stats-shadow: none;
+  background: var(--stats-bg);
 }
 
 .stats-page.is-dark {
-  --stats-border: rgba(var(--v-theme-borderLight), 0.46);
-  --stats-border-strong: rgba(var(--v-theme-borderLight), 0.66);
+  --stats-card: rgba(var(--v-theme-on-surface), 0.06);
+  --stats-border: rgba(var(--v-theme-on-surface), 0.14);
+  --stats-border-strong: rgba(var(--v-theme-on-surface), 0.18);
   --stats-soft: rgba(var(--v-theme-primary), 0.12);
   --stats-soft-strong: rgba(var(--v-theme-primary), 0.2);
 }
 
 .stats-shell {
   max-width: 1560px;
-  width: 100%;
   margin: 0 auto;
   padding-left: 12px !important;
   padding-right: 12px !important;
   color: var(--stats-text);
-  font-family:
-    "SF Pro Display",
-    "SF Pro Text",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  background: var(--stats-panel-bg);
-  border: 1px solid var(--stats-border);
-  border-radius: 12px;
-  backdrop-filter: blur(16px);
-  box-shadow: var(--stats-shadow);
+  font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .stats-page.is-dark .metric-label,
@@ -1217,7 +1096,9 @@ onBeforeUnmount(() => {
   justify-content: center;
   padding: 0;
   text-decoration: none;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
   width: 26px;
 }
 

@@ -46,7 +46,8 @@
     "disable": "コマンドを無効にする",
     "rename": "コマンド名を変更する",
     "viewDetails": "詳細を見る",
-    "pluginInactive": "先に所属プラグインを有効にしてください"
+    "pluginInactive": "先に所属プラグインを有効にしてください",
+    "sdkReadonly": "SDK コマンドは現在、この画面では表示のみ可能です"
   },
   "dialogs": {
     "rename": {

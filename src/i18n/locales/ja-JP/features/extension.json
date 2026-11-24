@@ -47,7 +47,7 @@
     "viewRepo": "リポジトリ",
     "openPages": "Pages",
     "openPage": "開く",
-    "openWebui": "プラグイン UI を開く",
+    "openView": "ビューを開く",
     "close": "閉じる",
     "save": "保存",
     "saveAndClose": "保存して閉じる",
@@ -73,7 +73,8 @@
     "installed": "インストール済み",
     "preset": "プリセット",
     "unknown": "不明",
-    "unsupported": "非対応"
+    "unsupported": "非対応",
+    "incompatible": "互換性がありません"
   },
   "tooltips": {
     "enable": "クリックして有効化",
@@ -155,7 +156,7 @@
     },
     "showFullName": "正式名称",
     "devDocs": "プラグイン開発ドキュメント",
-    "submitRepo": "プラグインリポジトリを登録",
+    "submitRepo": "プラグインを登録",
     "customSource": "カスタムプラグインソース",
     "source": "プラグインソース",
     "availableSources": "利用可能なソース",
@@ -306,13 +307,15 @@
     "enterJsonUrl": "プラグイン一覧の JSON データを返す URL を入力してください",
     "pluginNotFound": "プラグインが見つかりません",
     "pluginDisabled": "このプラグインは無効です。ページにアクセスする前に有効化してください。",
-    "pluginPageNotFound": "プラグインビューが見つかりません",
-    "pluginPageLoadFailed": "プラグインビューの読み込みに失敗しました",
+    "pluginViewNotFound": "プラグインビューが見つかりません",
+    "pluginViewLoadFailed": "プラグインビューの読み込みに失敗しました",
     "missingMarketPluginId": "有効なプラグイン識別子がないため、このプラグインマーケットのソースからインストールできません",
     "sourceBindSuccess": "プラグインソースを更新しました",
     "validatingPlugin": "プラグインを検証中…",
     "pluginValidateSuccess": "プラグインの検証に成功しました",
-    "pluginValidateFailed": "プラグインの検証に失敗しました"
+    "pluginValidateFailed": "プラグインの検証に失敗しました",
+    "pluginPageNotFound": "プラグインのページが見つかりません",
+    "pluginPageLoadFailed": "プラグインのページを読み込めませんでした"
   },
   "upload": {
     "fromFile": "ファイルからインストール",

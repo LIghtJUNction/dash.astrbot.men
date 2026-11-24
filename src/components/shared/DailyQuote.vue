@@ -27,7 +27,7 @@ interface Quote {
   author: string;
 }
 
-const quotes: Record<Locale, Quote[]> = {
+const quotes: Partial<Record<Locale, Quote[]>> & Record<"en-US", Quote[]> = {
   "en-US": [
     {
       text: "The best way to predict the future is to create it.",

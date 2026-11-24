@@ -1,68 +1,70 @@
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
-import type {
-  BackupChunkUploadRequest,
-  BackupExportRequest,
-  BackupRenameRequest,
-  BackupUploadInitRequest,
-  BackupUploadRequest,
-  BackupUploadSessionRequest,
-  BatchSessionProviderRequest,
-  BatchSessionServiceRequest,
-  BotConfigRequest,
-  BotRegistrationRequest,
-  ChatChunkUploadRequest,
-  ChatMessagePatchRequest,
-  ChatMessageRegenerateRequest,
-  ChatProjectRequest,
-  ChatRequest,
-  ChatSessionBatchDeleteRequest,
-  ChatSessionPatchRequest,
-  ChatThreadCreateRequest,
-  ChatThreadMessageRequest,
-  ChatUploadInitRequest,
-  ChatUploadSessionRequest,
-  CommandPatchRequest,
-  ConfigRoutesReplaceRequest,
-  ConfigRouteUpsertRequest,
-  ConversationBatchDeleteRequest,
-  ConversationExportRequest,
-  ConversationMessagesReplaceRequest,
-  ConversationPatchRequest,
-  CreateApiKeyRequest,
-  CronJobPatchRequest,
-  CronJobRequest,
-  DynamicConfig,
-  EnabledPatch,
-  GhproxyTestRequest,
-  KnowledgeBaseCreateRequest,
-  KnowledgeBaseRequest,
-  ListConversationsData,
-  LoginRequest,
-  McpServerConfig,
-  ModelScopeSyncRequest,
-  PipInstallRequest,
-  PluginConfigFileDeleteRequest,
-  PluginValidateRepoRequest,
-  PluginVersionSupportRequest,
-  ProviderConfigRequest,
-  RuntimeInfo,
-  SessionGroupRequest,
-  SessionRuleRequest,
-  SetupAuthRequest,
-  SuccessEnvelope,
-  T2iTemplateRequest,
-  TotpSetupRequest,
-  TraceSettingsRequest,
-  UmoListRequest,
-  UpdateAccountRequest,
-  UpdateRequest,
-} from "./generated/openapi-v1";
+import { resolveApiUrl, resolveWebSocketUrl } from "@/utils/request";
+
 import * as openApiV1 from "./generated/openapi-v1";
+import {
+  type BackupChunkUploadRequest,
+  type BackupExportRequest,
+  type BackupRenameRequest,
+  type BackupUploadInitRequest,
+  type BackupUploadRequest,
+  type BackupUploadSessionRequest,
+  type BotCleanupTarget,
+  type BotConfigRequest,
+  type BotRegistrationRequest,
+  type ChatChunkUploadRequest,
+  type ChatMessagePatchRequest,
+  type ChatMessageRegenerateRequest,
+  type ChatProjectRequest,
+  type ChatRequest,
+  type ChatSessionBatchDeleteRequest,
+  type ChatSessionPatchRequest,
+  type ChatThreadCreateRequest,
+  type ChatThreadMessageRequest,
+  type ChatUploadInitRequest,
+  type ChatUploadSessionRequest,
+  type CommandPatchRequest,
+  type ConfigRoutesReplaceRequest,
+  type ConfigRouteUpsertRequest,
+  type ConversationBatchDeleteRequest,
+  type ConversationExportRequest,
+  type ConversationMessagesReplaceRequest,
+  type ConversationPatchRequest,
+  type CreateApiKeyRequest,
+  type CronJobPatchRequest,
+  type CronJobRequest,
+  type DynamicConfig,
+  type EnabledPatch,
+  type GhproxyTestRequest,
+  type KnowledgeBaseCreateRequest,
+  type KnowledgeBaseRequest,
+  type ListConversationsData,
+  type LoginRequest,
+  type McpServerConfig,
+  type ModelScopeSyncRequest,
+  type PipInstallRequest,
+  type PluginConfigFileDeleteRequest,
+  type PluginValidateRepoRequest,
+  type PluginVersionSupportRequest,
+  type ProviderConfigRequest,
+  type PypiIndexTestRequest,
+  type RuntimeInfo,
+  type SessionGroupRequest,
+  type SessionRuleRequest,
+  type SetupAuthRequest,
+  type SuccessEnvelope,
+  type T2iTemplateRequest,
+  type TotpSetupRequest,
+  type TraceSettingsRequest,
+  type UmoListRequest,
+  type UpdateAccountRequest,
+  type UpdateRequest,
+} from "./generated/openapi-v1";
 import { client as openApiV1Client } from "./generated/openapi-v1/client.gen";
-import { apiV1Client, fetchWithAuth, generatedHttpClient, httpClient } from "./http";
+import { apiV1Client, fetchWithAuth, httpClient, openApiAxios } from "./http";
 
 openApiV1Client.setConfig({
-  axios: generatedHttpClient,
+  axios: openApiAxios,
   baseURL: undefined,
   throwOnError: true,
 });
@@ -122,7 +124,7 @@ export interface VersionData {
   version?: string;
   dashboard_version?: string;
   change_pwd_hint?: boolean;
-  legacy_pwd_hint?: boolean;
+  md5_pwd_hint?: boolean;
   password_upgrade_required?: boolean;
   runtime?: RuntimeInfo;
   [key: string]: unknown;
@@ -156,13 +158,13 @@ export interface BotListParams {
 }
 
 export interface ProviderListParams {
-  capability?: "chat" | "stt" | "tts" | "embedding" | "rerank";
+  capability?: "chat" | "stt" | "tts" | "embedding" | "rerank" | "decision";
   source_id?: string;
   enabled?: boolean;
 }
 
 export interface ToolListParams {
-  origin?: "builtin" | "plugin" | "mcp";
+  origin?: "plugin" | "mcp";
   enabled?: boolean;
 }
 
@@ -174,14 +176,6 @@ export interface SkillListParams extends Record<string, unknown> {
 export interface BackupListParams {
   page?: number;
   page_size?: number;
-}
-
-export interface SessionListParams {
-  page?: number;
-  page_size?: number;
-  search?: string;
-  platform?: string;
-  message_type?: "all" | "group" | "private";
 }
 
 export interface SessionRuleListParams {
@@ -213,6 +207,7 @@ const PROVIDER_TYPE_TO_CAPABILITY: Record<string, ProviderCapability> = {
   text_to_speech: "tts",
   embedding: "embedding",
   rerank: "rerank",
+  decision: "decision",
 };
 
 type V1Response<T> = Promise<AxiosResponse<ApiEnvelope<T>> & { legacyFallback?: boolean }>;
@@ -361,8 +356,12 @@ export const configProfileApi = {
       }),
     );
   },
-  get(configId: string) {
-    return typed<OpenConfig>(openApiV1.getConfigProfile({ path: { config_id: configId } }));
+  get(configId: string, reloadFromFile = false) {
+    const options = {
+      path: { config_id: configId },
+      ...(reloadFromFile ? { query: { reload_from_file: true } } : {}),
+    };
+    return typed<OpenConfig>(openApiV1.getConfigProfile(options));
   },
   update(configId: string, config: OpenConfig, requestConfig?: AxiosRequestConfig) {
     return typed<OpenConfig>(
@@ -394,8 +393,10 @@ export const systemConfigApi = {
   schema() {
     return typed<OpenConfig>(openApiV1.getSystemConfigSchema());
   },
-  get() {
-    return typed<OpenConfig>(openApiV1.getSystemConfig());
+  get(reloadFromFile = false) {
+    return typed<OpenConfig>(
+      reloadFromFile ? openApiV1.getSystemConfig({ query: { reload_from_file: true } }) : openApiV1.getSystemConfig(),
+    );
   },
   runtime() {
     return typed<OpenConfig>(openApiV1.getSystemConfigRuntime());
@@ -458,8 +459,13 @@ export const botApi = {
       }),
     );
   },
-  delete(botId: string) {
-    return typed<OpenConfig>(openApiV1.deleteBotById({ query: { bot_id: botId } }));
+  delete(botId: string, cleanup: BotCleanupTarget[] = []) {
+    return typed<OpenConfig>(
+      openApiV1.deleteBotById({
+        query: { bot_id: botId, cleanup },
+        paramsSerializer: { indexes: null },
+      }),
+    );
   },
 };
 
@@ -632,6 +638,20 @@ export const apiKeyApi = {
 };
 
 export const traceApi = {
+  history(query?: {
+    limit?: number;
+    page?: number;
+    cursor?: string;
+    query?: string;
+    errors?: boolean;
+    models?: boolean;
+    plugins?: boolean;
+  }) {
+    return typed<OpenConfig>(openApiV1.listTraces({ query }));
+  },
+  detail(traceId: string) {
+    return typed<OpenConfig>(openApiV1.getTraceDetail({ path: { trace_id: traceId } }));
+  },
   getSettings() {
     return typed<OpenConfig>(openApiV1.getTraceSettings());
   },
@@ -727,27 +747,38 @@ export const backupApi = {
     return typed<any>(openApiV1.renameBackup({ path: { filename }, body: payload }));
   },
   downloadUrl(filename: string, token: string) {
-    return `/api/v1/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`;
+    return resolveApiUrl(`/api/v1/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`);
   },
 };
 
 export const chatApi = {
+  transcribeAudio(file: File, providerId: string, signal?: AbortSignal) {
+    return typed<{ text: string; provider_id: string }>(
+      openApiV1.transcribeChatAudio({ body: { file, provider_id: providerId }, signal }),
+    );
+  },
   send(payload: ChatRequest) {
     return typed<any>(openApiV1.sendChatMessage({ body: payload }));
   },
   sendStreamUrl() {
-    return "/api/v1/chat";
+    return resolveApiUrl("/api/v1/chat");
   },
   resumeRunStreamUrl(runId: string) {
-    return `/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`;
+    return resolveApiUrl(`/api/v1/chat/runs/${encodeURIComponent(runId)}/stream`);
   },
-  liveWebSocketUrl(token: string, host = window.location.host) {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${host}/api/v1/live-chat/ws?token=${encodeURIComponent(token)}`;
+  liveWebSocketUrl(token: string, host?: string) {
+    if (host) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${host}/api/v1/live-chat/ws?token=${encodeURIComponent(token)}`;
+    }
+    return resolveWebSocketUrl("/api/v1/live-chat/ws", { token });
   },
-  unifiedWebSocketUrl(token: string, host = window.location.host) {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
+  unifiedWebSocketUrl(token: string, host?: string) {
+    if (host) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${host}/api/v1/unified-chat/ws?token=${encodeURIComponent(token)}`;
+    }
+    return resolveWebSocketUrl("/api/v1/unified-chat/ws", { token });
   },
   listSessions(params?: ChatSessionListParams) {
     return typed<any>(openApiV1.listChatSessions({ query: generatedQuery(params) }));
@@ -801,7 +832,9 @@ export const chatApi = {
     );
   },
   regenerateMessageUrl(sessionId: string, messageId: string | number) {
-    return `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(String(messageId))}/regenerate`;
+    return resolveApiUrl(
+      `/api/v1/chat/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(String(messageId))}/regenerate`,
+    );
   },
   createThread(payload: ChatThreadCreateRequest) {
     return typed<any>(openApiV1.createChatThread({ body: payload }));
@@ -821,7 +854,7 @@ export const chatApi = {
     );
   },
   sendThreadMessageUrl(threadId: string) {
-    return `/api/v1/chat/threads/${encodeURIComponent(threadId)}/messages`;
+    return resolveApiUrl(`/api/v1/chat/threads/${encodeURIComponent(threadId)}/messages`);
   },
   listProjects() {
     return typed<any>(openApiV1.listChatProjects());
@@ -846,26 +879,26 @@ export const chatApi = {
   listProjectSessions(projectId: string) {
     return typed<any>(openApiV1.listChatProjectSessions({ path: { project_id: projectId } }));
   },
-  listProjectWorkspaceFiles(projectId: string, path = "") {
+  listProjectWorkspaceFiles(projectId: string, path = "", sessionId?: string) {
     return typed<any>(
       openApiV1.listChatProjectWorkspaceFiles({
         path: { project_id: projectId },
-        query: path ? { path } : undefined,
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  getProjectWorkspaceFile(projectId: string, path: string) {
+  getProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return typed<any>(
       openApiV1.getChatProjectWorkspaceFile({
         path: { project_id: projectId },
-        query: { path },
+        query: { path, session_id: sessionId },
       }),
     );
   },
-  downloadProjectWorkspaceFile(projectId: string, path: string) {
+  downloadProjectWorkspaceFile(projectId: string, path: string, sessionId?: string) {
     return openApiV1.downloadChatProjectWorkspaceFile({
       path: { project_id: projectId },
-      query: { path },
+      query: { path, session_id: sessionId },
       responseType: "blob",
     }) as Promise<AxiosResponse<Blob>>;
   },
@@ -882,8 +915,8 @@ export const chatApi = {
 };
 
 export const fileApi = {
-  upload(formData: FormData) {
-    return typed<any>(openApiV1.uploadFile({ body: generatedFormData(formData) }));
+  upload(formData: FormData, signal?: AbortSignal) {
+    return typed<any>(openApiV1.uploadFile({ body: generatedFormData(formData), signal }));
   },
   initUpload(payload: ChatUploadInitRequest) {
     return typed<any>(openApiV1.initFileUpload({ body: payload }));
@@ -907,22 +940,35 @@ export const fileApi = {
     }) as Promise<AxiosResponse<Blob>>;
   },
   byNameUrl(filename: string) {
-    return `/api/v1/files/content?filename=${encodeURIComponent(filename)}`;
+    return resolveApiUrl(`/api/v1/files/content?filename=${encodeURIComponent(filename)}`);
   },
   contentUrl(attachmentId: string) {
-    return `/api/v1/files/${encodeURIComponent(attachmentId)}/content`;
+    return resolveApiUrl(`/api/v1/files/${encodeURIComponent(attachmentId)}/content`);
   },
   tokenUrl(fileToken: string) {
-    return `/api/v1/files/tokens/${encodeURIComponent(fileToken)}`;
+    return resolveApiUrl(`/api/v1/files/tokens/${encodeURIComponent(fileToken)}`);
   },
 };
 
 export const sessionApi = {
-  list(params?: SessionListParams) {
-    return typed<any>(openApiV1.listSessions({ query: generatedQuery(params) }));
+  overrides(umo: string, profileId?: string) {
+    return typed<any>(openApiV1.getSessionOverrides({ query: { umo, profile_id: profileId } }));
   },
-  activeUmos() {
-    return typed<any>(openApiV1.listActiveUmos());
+  senders(params?: { search?: string; limit?: number; page?: number; sender_ids?: string[] }) {
+    return typed<{
+      page: number;
+      has_more: boolean;
+      senders: Array<{
+        umo: string;
+        sender_id: string;
+        sender_name: string;
+        platform: string;
+        display_name: string;
+      }>;
+    }>(openApiV1.listSessionSenders({ query: params }));
+  },
+  activeUmos(params?: { platform_id?: string }) {
+    return typed<any>(openApiV1.listActiveUmos({ query: params }));
   },
   listRules(params?: SessionRuleListParams) {
     return typed<any>(openApiV1.listSessionRules({ query: generatedQuery(params) }));
@@ -932,12 +978,6 @@ export const sessionApi = {
   },
   deleteRules(payload: UmoListRequest) {
     return typed<any>(openApiV1.deleteSessionRules({ body: payload }));
-  },
-  batchUpdateProvider(payload: BatchSessionProviderRequest) {
-    return typed<any>(openApiV1.batchUpdateSessionProvider({ body: payload }));
-  },
-  batchUpdateService(payload: BatchSessionServiceRequest) {
-    return typed<any>(openApiV1.batchUpdateSessionService({ body: payload }));
   },
   listGroups() {
     return typed<any>(openApiV1.listSessionGroups());
@@ -976,15 +1016,32 @@ export const cronApi = {
   },
 };
 
-export const subagentApi = {
-  getConfig() {
-    return typed<OpenConfig>(openApiV1.getSubagentConfig());
+export type AgentConfig = {
+  config_id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  runtime: string;
+  config: Record<string, any>;
+};
+export type AgentConfigInput = Omit<AgentConfig, "config_id">;
+export type AgentRuntimeInfo = { runtime: string; config: Record<string, any> };
+
+export const agentConfigApi = {
+  list() {
+    return typed<AgentConfig[]>(openApiV1.listAgentConfigs());
   },
-  updateConfig(config: OpenConfig) {
-    return typed<OpenConfig>(openApiV1.updateSubagentConfig({ body: config }));
+  runtimes() {
+    return typed<AgentRuntimeInfo[]>(openApiV1.listAgentRuntimes());
   },
-  availableTools() {
-    return typed<any>(openApiV1.listSubagentAvailableTools());
+  create(body: AgentConfigInput) {
+    return typed<AgentConfig>(openApiV1.createAgentConfig({ body }));
+  },
+  update(configId: string, body: AgentConfigInput) {
+    return typed<AgentConfig>(openApiV1.updateAgentConfig({ path: { config_id: configId }, body }));
+  },
+  delete(configId: string) {
+    return typed<unknown>(openApiV1.deleteAgentConfig({ path: { config_id: configId } }));
   },
 };
 
@@ -1106,8 +1163,14 @@ export const logApi = {
   history() {
     return typed<{ logs?: OpenConfig[] }>(openApiV1.getLogHistory());
   },
+  exportArchive(redact = true, startTime?: number, endTime?: number) {
+    return openApiV1.exportLogs({
+      query: { redact, start_time: startTime, end_time: endTime },
+      responseType: "blob",
+    }) as Promise<AxiosResponse<Blob>>;
+  },
   liveUrl() {
-    return "/api/v1/logs/live";
+    return resolveApiUrl("/api/v1/logs/live");
   },
 };
 
@@ -1260,7 +1323,7 @@ export const pluginApi = {
   },
   page(pluginId: string, pageName: string) {
     return typed<any>(
-      openApiV1.getPluginPageById({
+      openApiV1.getPluginViewById({
         query: { plugin_id: pluginId, page_name: pageName },
       }) as any,
     );
@@ -1559,10 +1622,10 @@ export const conversationApi = {
 };
 
 export const statsApi = {
-  get(offsetSec?: number) {
+  get(offsetSec?: number, sections?: string) {
     return typed<any>(
       openApiV1.getStats({
-        query: offsetSec === undefined ? undefined : { offset_sec: offsetSec },
+        query: { offset_sec: offsetSec, sections },
       }),
     );
   },
@@ -1590,9 +1653,22 @@ export const statsApi = {
       httpClient.post<ApiEnvelope<{ latency?: number }>>("/api/stat/test-ghproxy-connection", payload),
     );
   },
-  startTime() {
-    const v1Request = typed<StartTimeData>(openApiV1.getStartTime());
-    const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>("/api/stat/start-time");
+  testPypiIndex(payload: PypiIndexTestRequest) {
+    return typed<{ latency?: number }>(openApiV1.testPypiIndexConnection({ body: payload }));
+  },
+  measureGhproxySpeed(payload: GhproxyTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measureGhproxySpeed({ body: payload }),
+    );
+  },
+  measurePypiIndexSpeed(payload: PypiIndexTestRequest) {
+    return typed<{ speed?: number; bytes?: number; duration?: number }>(
+      openApiV1.measurePypiIndexSpeed({ body: payload }),
+    );
+  },
+  startTime(requestConfig?: AxiosRequestConfig) {
+    const v1Request = typed<StartTimeData>(openApiV1.getStartTime(generatedOptions({}, requestConfig)));
+    const legacyRequest = httpClient.get<ApiEnvelope<StartTimeData>>("/api/stat/start-time", requestConfig);
 
     // Restart polling must also work after downgrading to backends without v1 stats routes.
     return firstSuccessfulResponse<StartTimeData>([v1Request, legacyRequest]);
@@ -1605,7 +1681,7 @@ export const statsApi = {
   storage() {
     return typed<OpenConfig>(openApiV1.getStorageStatus());
   },
-  cleanupStorage(target?: string) {
+  cleanupStorage(target: "logs" | "cache" | "traces" | "all" = "all") {
     return typed<OpenConfig>(
       openApiV1.cleanupStorage({
         body: target ? { target } : undefined,

@@ -21,9 +21,7 @@
                 hide-details
               >
                 <template v-slot:selection="{ item }">
-                  <v-chip size="small" label>
-                    {{ item.title }}
-                  </v-chip>
+                  <v-chip size="small" label> {{ item.title }} </v-chip>
                 </template>
               </v-combobox>
             </v-col>
@@ -42,9 +40,7 @@
                 flat
               >
                 <template v-slot:selection="{ item }">
-                  <v-chip size="small" variant="tonal" label>
-                    {{ item.title }}
-                  </v-chip>
+                  <v-chip size="small" variant="tonal" label> {{ item.title }} </v-chip>
                 </template>
               </v-select>
             </v-col>
@@ -128,12 +124,8 @@
                   variant="outlined"
                   class="umo-header-toggle"
                 >
-                  <v-btn value="parsed" size="x-small">
-                    {{ tm("table.umoDisplay.parsed") }}
-                  </v-btn>
-                  <v-btn value="raw" size="x-small">
-                    {{ tm("table.umoDisplay.raw") }}
-                  </v-btn>
+                  <v-btn value="parsed" size="x-small"> {{ tm("table.umoDisplay.parsed") }} </v-btn>
+                  <v-btn value="raw" size="x-small"> {{ tm("table.umoDisplay.raw") }} </v-btn>
                 </v-btn-toggle>
               </div>
             </template>
@@ -141,9 +133,7 @@
             <template v-slot:item.title="{ item }">
               <div class="conversation-title-cell">
                 <div class="conversation-title-row">
-                  <span class="conversation-title-text">{{
-                    item.title || tm("status.noTitle")
-                  }}</span>
+                  <span class="conversation-title-text">{{ item.title || tm("status.noTitle") }}</span>
                   <v-btn
                     icon
                     variant="plain"
@@ -152,14 +142,12 @@
                     :ripple="false"
                     class="conversation-inline-edit"
                     @click.stop="editConversation(item)"
-                    :disabled="actionLoading"
+                    :disabled="loading"
                   >
                     <v-icon size="14">mdi-pencil</v-icon>
                   </v-btn>
                 </div>
-                <span class="conversation-title-meta">{{
-                  item.cid || tm("status.unknown")
-                }}</span>
+                <span class="conversation-title-meta">{{ item.cid || tm("status.unknown") }}</span>
               </div>
             </template>
 
@@ -179,50 +167,34 @@
                       />
                       <div class="conversation-umo-parsed">
                         <v-chip size="x-small" label>
-                          {{
-                            getConversationUmoInfo(item).platform ||
-                            tm("status.unknown")
-                          }}
+                          {{ getConversationUmoInfo(item).platform ||
+                            tm("status.unknown") }}
                         </v-chip>
                         <span class="umo-separator">:</span>
                         <v-chip size="x-small" label>
-                          {{
-                            getMessageTypeDisplay(
+                          {{ getMessageTypeDisplay(
                               getConversationUmoInfo(item).message_type,
-                            )
-                          }}
+                            ) }}
                         </v-chip>
                         <span class="umo-separator">:</span>
-                        <span class="umo-session-id">{{
-                          getConversationUmoInfo(item).session_id ||
-                          tm("status.unknown")
-                        }}</span>
+                        <span class="umo-session-id"
+                          >{{ getConversationUmoInfo(item).session_id ||
+                          tm("status.unknown") }}</span
+                        >
                       </div>
                     </div>
                   </template>
-                  <span v-else class="umo-raw-text">{{
-                    item.user_id || tm("status.unknown")
-                  }}</span>
+                  <span v-else class="umo-raw-text">{{ item.user_id || tm("status.unknown") }}</span>
                 </div>
-                <v-btn
-                  icon
-                  variant="plain"
-                  size="x-small"
-                  class="umo-copy-button"
-                  @click.stop="copyUmoSource(item)"
-                >
+                <v-btn icon variant="plain" size="x-small" class="umo-copy-button" @click.stop="copyUmoSource(item)">
                   <v-icon size="16">mdi-content-copy</v-icon>
                 </v-btn>
               </div>
             </template>
 
-            <template v-slot:item.created_at="{ item }">
-              {{ formatTimestamp(item.created_at) }}
-            </template>
+            <template v-slot:item.created_at="{ item }"> {{ formatTimestamp(item.created_at) }} </template>
 
-            <template v-slot:item.updated_at="{ item }">
-              {{ formatTimestamp(item.updated_at) }}
-            </template>
+            <template v-slot:item.updated_at="{ item }"> {{ formatTimestamp(item.updated_at) }} </template>
 
             <template v-slot:item.actions="{ item }">
               <div class="actions-wrapper">
@@ -232,7 +204,7 @@
                   size="x-small"
                   class="action-button"
                   @click="viewConversation(item)"
-                  :disabled="actionLoading"
+                  :disabled="loading"
                 >
                   <v-icon>mdi-eye</v-icon>
                 </v-btn>
@@ -243,7 +215,7 @@
                   size="x-small"
                   class="action-button"
                   @click="confirmDeleteConversation(item)"
-                  :disabled="actionLoading"
+                  :disabled="loading"
                 >
                   <v-icon>mdi-delete</v-icon>
                 </v-btn>
@@ -252,18 +224,8 @@
 
             <template v-slot:no-data>
               <div class="d-flex flex-column align-center py-6">
-                <template v-if="listLoading">
-                  <v-progress-circular indeterminate color="primary" />
-                </template>
-                <template v-else-if="listError">
-                  <v-icon size="64" color="error">mdi-alert-circle-outline</v-icon>
-                  <span class="text-subtitle-1 text-disabled mt-3">{{ tm("messages.fetchError") }}</span>
-                  <v-btn class="mt-3" size="small" variant="tonal" @click="fetchConversations">{{ tm("history.refresh") }}</v-btn>
-                </template>
-                <template v-else>
-                  <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
-                  <span class="text-subtitle-1 text-disabled mt-3">{{ tm("status.noData") }}</span>
-                </template>
+                <v-icon size="64" color="grey lighten-1">mdi-chat-remove</v-icon>
+                <span class="text-subtitle-1 text-disabled mt-3">{{ tm("status.noData") }}</span>
               </div>
             </template>
           </v-data-table>
@@ -271,13 +233,9 @@
           <!-- 分页控制 -->
           <div class="d-flex justify-center py-3">
             <!-- 每页大小选择器 -->
-            <div
-              class="d-flex justify-between align-center px-4 py-2 bg-grey-lighten-5"
-            >
+            <div class="d-flex justify-between align-center px-4 py-2 bg-grey-lighten-5">
               <div class="d-flex align-center">
-                <span class="text-caption mr-2"
-                  >{{ tm("pagination.itemsPerPage") }}:</span
-                >
+                <span class="text-caption mr-2">{{ tm("pagination.itemsPerPage") }}:</span>
                 <v-select
                   v-model="pagination.page_size"
                   :items="pageSizeOptions"
@@ -290,8 +248,7 @@
                 ></v-select>
               </div>
               <div class="text-caption ml-4">
-                {{
-                  tm("pagination.showingItems", {
+                {{ tm("pagination.showingItems", {
                     start: Math.min(
                       (pagination.page - 1) * pagination.page_size + 1,
                       pagination.total,
@@ -301,8 +258,7 @@
                       pagination.total,
                     ),
                     total: pagination.total,
-                  })
-                }}
+                  }) }}
               </div>
             </div>
             <v-pagination
@@ -321,13 +277,9 @@
     <!-- 对话详情对话框 -->
     <v-dialog v-model="dialogView" max-width="900px" scrollable>
       <v-card class="conversation-detail-card" :class="{ 'conversation-detail-card--edit': isEditingHistory }">
-        <v-card-title
-          class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title"
-        >
+        <v-card-title class="text-h3 pa-4 pb-0 pl-6 conversation-detail-title">
           <div class="conversation-detail-heading">
-            <span class="text-truncate">{{
-              selectedConversation?.title || tm("status.noTitle")
-            }}</span>
+            <span class="text-truncate">{{ selectedConversation?.title || tm("status.noTitle") }}</span>
             <UmoDisplay
               v-if="
                 selectedConversation?.user_id &&
@@ -340,29 +292,22 @@
               :show-meta="false"
               class="conversation-umo-display"
             />
-            <div
-              v-if="selectedConversation?.user_id"
-              class="conversation-umo-parsed conversation-detail-umo-parsed"
-            >
+            <div v-if="selectedConversation?.user_id" class="conversation-umo-parsed conversation-detail-umo-parsed">
               <v-chip size="x-small" label>
-                {{
-                  getConversationUmoInfo(selectedConversation).platform ||
-                  tm("status.unknown")
-                }}
+                {{ getConversationUmoInfo(selectedConversation).platform ||
+                  tm("status.unknown") }}
               </v-chip>
               <span class="umo-separator">:</span>
               <v-chip size="x-small" label>
-                {{
-                  getMessageTypeDisplay(
+                {{ getMessageTypeDisplay(
                     getConversationUmoInfo(selectedConversation).message_type,
-                  )
-                }}
+                  ) }}
               </v-chip>
               <span class="umo-separator">:</span>
-              <span class="umo-session-id">{{
-                getConversationUmoInfo(selectedConversation).session_id ||
-                tm("status.unknown")
-              }}</span>
+              <span class="umo-session-id"
+                >{{ getConversationUmoInfo(selectedConversation).session_id ||
+                tm("status.unknown") }}</span
+              >
             </div>
           </div>
         </v-card-title>
@@ -376,14 +321,10 @@
               class="mr-2"
               @click="isEditingHistory = !isEditingHistory"
             >
-              <v-icon class="mr-1">{{
-                isEditingHistory ? "mdi-eye" : "mdi-pencil"
-              }}</v-icon>
-              {{
-                isEditingHistory
+              <v-icon class="mr-1">{{ isEditingHistory ? "mdi-eye" : "mdi-pencil" }}</v-icon>
+              {{ isEditingHistory
                   ? tm("dialogs.view.previewMode")
-                  : tm("dialogs.view.editMode")
-              }}
+                  : tm("dialogs.view.editMode") }}
             </v-btn>
             <v-btn
               v-if="isEditingHistory"
@@ -402,7 +343,7 @@
           <div v-if="isEditingHistory" class="monaco-editor-container">
             <VueMonacoEditor
               v-model:value="editedHistory"
-              :theme="isDark ? 'vs-dark' : 'vs-light'"
+              theme="vs-dark"
               language="json"
               :options="{
                 automaticLayout: true,
@@ -420,33 +361,24 @@
           <div
             v-else
             class="conversation-messages-container"
-            style="background-color: rgb(var(--v-theme-surface))"
+            style="background-color: var(--v-theme-surface)"
             ref="messagesContainer"
             @wheel.prevent="onContainerWheel"
           >
             <!-- 空对话提示 -->
-            <div
-              v-if="conversationHistory.length === 0"
-              class="text-center py-5"
-            >
+            <div v-if="conversationHistory.length === 0" class="text-center py-5">
               <v-icon size="48" color="grey">mdi-chat-remove</v-icon>
               <p class="text-disabled mt-2">{{ tm("status.emptyContent") }}</p>
             </div>
 
             <!-- 消息列表组件 -->
-            <MessageList
-              v-else
-              :messages="formattedMessages"
-              :isDark="isDark"
-            />
+            <MessageList v-else :messages="formattedMessages" :isDark="isDark" />
           </div>
         </v-card-text>
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="closeHistoryDialog">
-            {{ tm("dialogs.view.close") }}
-          </v-btn>
+          <v-btn variant="text" @click="closeHistoryDialog"> {{ tm("dialogs.view.close") }} </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -479,12 +411,7 @@
           <v-btn variant="text" @click="dialogEdit = false" :disabled="loading">
             {{ tm("dialogs.edit.cancel") }}
           </v-btn>
-          <v-btn
-            color="primary"
-            variant="tonal"
-            @click="saveConversation"
-            :loading="loading"
-          >
+          <v-btn color="primary" variant="tonal" @click="saveConversation" :loading="loading">
             {{ tm("dialogs.edit.save") }}
           </v-btn>
         </v-card-actions>
@@ -501,11 +428,9 @@
 
         <v-card-text class="py-4">
           <p>
-            {{
-              tm("dialogs.delete.message", {
+            {{ tm("dialogs.delete.message", {
                 title: selectedConversation?.title || tm("status.noTitle"),
-              })
-            }}
+              }) }}
           </p>
         </v-card-text>
 
@@ -513,19 +438,10 @@
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn
-            variant="text"
-            @click="dialogDelete = false"
-            :disabled="loading"
-          >
+          <v-btn variant="text" @click="dialogDelete = false" :disabled="loading">
             {{ tm("dialogs.delete.cancel") }}
           </v-btn>
-          <v-btn
-            color="error"
-            variant="tonal"
-            @click="deleteConversation"
-            :loading="loading"
-          >
+          <v-btn color="error" variant="tonal" @click="deleteConversation" :loading="loading">
             {{ tm("dialogs.delete.confirm") }}
           </v-btn>
         </v-card-actions>
@@ -541,11 +457,7 @@
         </v-card-title>
 
         <v-card-text class="py-4">
-          <p class="mb-3">
-            {{
-              tm("dialogs.batchDelete.message", { count: selectedItems.length })
-            }}
-          </p>
+          <p class="mb-3"> {{ tm("dialogs.batchDelete.message", { count: selectedItems.length }) }} </p>
 
           <!-- 显示前几个要删除的对话 -->
           <div v-if="selectedItems.length > 0" class="mb-3">
@@ -560,41 +472,24 @@
             >
               {{ item.title || tm("status.noTitle") }}
             </v-chip>
-            <v-chip
-              v-if="selectedItems.length > 5"
-              size="small"
-              class="mr-1 mb-1"
-            >
-              {{
-                tm("dialogs.batchDelete.andMore", {
+            <v-chip v-if="selectedItems.length > 5" size="small" class="mr-1 mb-1">
+              {{ tm("dialogs.batchDelete.andMore", {
                   count: selectedItems.length - 5,
-                })
-              }}
+                }) }}
             </v-chip>
           </div>
 
-          <v-alert type="warning" variant="tonal" class="mb-3">
-            {{ tm("dialogs.batchDelete.warning") }}
-          </v-alert>
+          <v-alert type="warning" variant="tonal" class="mb-3"> {{ tm("dialogs.batchDelete.warning") }} </v-alert>
         </v-card-text>
 
         <v-divider></v-divider>
 
         <v-card-actions class="pa-4">
           <v-spacer></v-spacer>
-          <v-btn
-            variant="text"
-            @click="dialogBatchDelete = false"
-            :disabled="loading"
-          >
+          <v-btn variant="text" @click="dialogBatchDelete = false" :disabled="loading">
             {{ tm("dialogs.batchDelete.cancel") }}
           </v-btn>
-          <v-btn
-            color="error"
-            variant="tonal"
-            @click="batchDeleteConversations"
-            :loading="loading"
-          >
+          <v-btn color="error" variant="tonal" @click="batchDeleteConversations" :loading="loading">
             {{ tm("dialogs.batchDelete.confirm") }}
           </v-btn>
         </v-card-actions>
@@ -602,32 +497,26 @@
     </v-dialog>
 
     <!-- 消息提示 -->
-    <v-snackbar
-      :timeout="3000"
-      elevation="6"
-      :color="messageType"
-      v-model="showMessage"
-      location="top"
-    >
+    <v-snackbar :timeout="3000" elevation="6" :color="messageType" v-model="showMessage" location="top">
       {{ message }}
     </v-snackbar>
   </div>
 </template>
 
 <script lang="ts">
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
+import { debounce } from "lodash";
 import type { editor } from "monaco-editor";
-import { defineComponent, markRaw, useTemplateRef } from "vue";
-import type { VForm } from "vuetify/components";
-import { type ApiEnvelope, conversationApi } from "@/api/v1";
+import { defineComponent, markRaw } from "vue";
+import type { DataTableHeader } from "vuetify";
+import { conversationApi } from "@/api/v1";
 import MessageList from "@/components/chat/MessageList.vue";
+import { LazyMonacoEditor as VueMonacoEditor } from "@/components/shared/LazyMonacoEditor";
 import UmoDisplay from "@/components/shared/UmoDisplay.vue";
-import type { ChatRecord, MessagePart, ToolCall } from "@/composables/useMessages";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
+import { useCommonStore } from "@/stores/common";
 import { useCustomizerStore } from "@/stores/customizer";
 import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
-import axios, { isCancel } from "@/utils/request";
+import axios, { AxiosError, isCancel } from "@/utils/request";
 
 interface UmoInfo {
   umo?: string;
@@ -649,29 +538,23 @@ interface ConversationItem {
   sessionInfo?: { platform: string; messageType: string; sessionId: string };
 }
 
+type MessageContentPart =
+  | { type: "plain"; text?: string }
+  | { type: "image"; embedded_url?: string }
+  | {
+      type: "tool_call";
+      tool_calls: Array<{ id: string; name: string; args: string; result: unknown; ts: number; finished_ts: number }>;
+    };
+
 interface HistoryMessage extends Record<string, unknown> {
   role: string;
-  content?: unknown;
+  content?: string | unknown[] | Record<string, unknown> | null;
 }
 
-interface ConversationListData {
-  conversations: ConversationItem[];
-  pagination?: { page: number; page_size: number; total: number; total_pages: number };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseHistory(value: unknown): HistoryMessage[] {
-  const history: unknown = typeof value === "string" ? JSON.parse(value) : value;
-  if (
-    !Array.isArray(history) ||
-    !history.every((entry): entry is HistoryMessage => isRecord(entry) && typeof entry.role === "string")
-  ) {
-    throw new Error("Conversation history must be an array of messages with roles.");
-  }
-  return history;
+interface VFormRef {
+  validate: () => Promise<{ valid: boolean }>;
+  reset?: () => void;
+  resetValidation?: () => void;
 }
 
 export default defineComponent({
@@ -687,10 +570,8 @@ export default defineComponent({
     const { tm } = useModuleI18n("features/conversation");
     const customizerStore = useCustomizerStore();
     const confirmDialog = useConfirmDialog();
-    const form = useTemplateRef<InstanceType<typeof VForm>>("form");
 
     return {
-      form,
       locale,
       tm,
       customizerStore,
@@ -702,6 +583,7 @@ export default defineComponent({
     return {
       // 表格数据
       conversations: [] as ConversationItem[],
+      filterBots: [] as Array<{ id: string; type: string }>,
       search: "",
       selectedItems: [] as ConversationItem[], // 批量选择的项目
 
@@ -740,8 +622,7 @@ export default defineComponent({
       valid: true,
 
       // 状态控制
-      listLoading: true,
-      listError: false,
+      listLoading: false,
       listAbortController: null as AbortController | null,
       listRequestId: 0,
       actionLoading: false,
@@ -756,26 +637,37 @@ export default defineComponent({
       monacoEditor: null as editor.IStandaloneCodeEditor | null,
       umoDisplayMode: "parsed",
 
-      availablePlatforms: [] as { title: string; value: string }[],
-      filterTimeout: null as ReturnType<typeof setTimeout> | null,
+      commonStore: useCommonStore(),
+      debouncedApplyFilters: undefined as ReturnType<typeof debounce> | undefined,
     };
   },
 
   watch: {
     // 监听筛选条件变化，使用防抖处理
     platformFilter() {
-      this.scheduleFilterRefresh();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
     messageTypeFilter() {
-      this.scheduleFilterRefresh();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
     search() {
-      this.scheduleFilterRefresh();
+      this.invalidateConversationListRequest();
+      this.debouncedApplyFilters?.();
     },
   },
 
+  created() {
+    this.debouncedApplyFilters = debounce(() => {
+      // 重置到第一页
+      this.pagination.page = 1;
+      this.fetchConversations();
+    }, 300);
+  },
+
   beforeUnmount() {
-    this.cancelFilterRefresh();
+    this.debouncedApplyFilters?.cancel();
     this.listRequestId += 1;
     this.listAbortController?.abort();
   },
@@ -785,7 +677,7 @@ export default defineComponent({
       return this.listLoading || this.actionLoading;
     },
     // 动态表头
-    tableHeaders() {
+    tableHeaders(): DataTableHeader<ConversationItem>[] {
       return [
         {
           title: this.tm("table.headers.title"),
@@ -817,9 +709,17 @@ export default defineComponent({
           title: this.tm("table.headers.actions"),
           key: "actions",
           sortable: false,
-          align: "center" as const,
+          align: "center",
         },
       ];
+    },
+
+    // 可用平台列表
+    availablePlatforms() {
+      return this.filterBots.map((bot) => ({
+        title: bot.type && bot.type !== bot.id ? bot.id + " (" + bot.type + ")" : bot.id,
+        value: bot.id,
+      }));
     },
 
     // 可用消息类型列表
@@ -840,17 +740,18 @@ export default defineComponent({
       };
     },
 
+    // 检测是否为暗色模式
     isDark() {
       return this.customizerStore.isDark;
     },
 
     // 将对话历史转换为 MessageList 组件期望的格式
-    formattedMessages(): ChatRecord[] {
+    formattedMessages() {
       // 按 tool_call_id 索引 tool 角色消息的执行结果
-      const toolResultsById: Record<string, unknown> = {};
+      const toolResultsById = new Map<string, unknown>();
       for (const msg of this.conversationHistory) {
         if (msg.role === "tool" && typeof msg.tool_call_id === "string") {
-          toolResultsById[msg.tool_call_id] = msg.content;
+          toolResultsById.set(msg.tool_call_id, msg.content);
         }
       }
 
@@ -859,29 +760,29 @@ export default defineComponent({
           // tool / system 等非聊天角色不直接渲染为气泡，避免大文本走 markdown 路径卡死页面
           .filter((msg) => msg.role === "user" || msg.role === "assistant")
           .map((msg) => {
-            console.info("处理消息:", msg.role, msg.content);
-
             const messageParts = this.convertContentToMessageParts(msg.content)
               // 丢弃 convertContentToMessageParts 兜底插入的空 plain，避免 assistant 仅有工具调用时渲染空气泡
               .filter((part) => part.type !== "plain" || (part.text && part.text.trim()));
 
             // 把 OpenAI 风格的 assistant.tool_calls 转成 MessageList 已支持的 tool_call part
-            if (msg.role === "assistant" && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
-              const toolCalls: ToolCall[] = msg.tool_calls.filter(isRecord).map((call) => {
-                const fn = isRecord(call.function) ? call.function : {};
-                const id = typeof call.id === "string" ? call.id : undefined;
-                const name = fn.name || call.name;
-                return {
-                  id,
-                  name: typeof name === "string" ? name : undefined,
-                  args: fn.arguments ?? call.arguments,
-                  result: id ? toolResultsById[id] : undefined,
-                  // Replayed tool calls are complete, but have no measured duration.
-                  ts: 0,
-                  finished_ts: 1,
-                };
+            if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+              const toolCalls = msg.tool_calls.flatMap((candidate: unknown, index: number) => {
+                if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+                const toolCall = candidate as Record<string, unknown>;
+                const fn =
+                  toolCall.function && typeof toolCall.function === "object" && !Array.isArray(toolCall.function)
+                    ? (toolCall.function as Record<string, unknown>)
+                    : {};
+                const name =
+                  typeof fn.name === "string" ? fn.name : typeof toolCall.name === "string" ? toolCall.name : "";
+                if (!name) return [];
+                const id = typeof toolCall.id === "string" ? toolCall.id : "history-tool-" + index;
+                const rawArgs = fn.arguments ?? toolCall.arguments;
+                const args =
+                  typeof rawArgs === "string" ? rawArgs : rawArgs == null ? "" : (JSON.stringify(rawArgs) ?? "");
+                return [{ id, name, args, result: toolResultsById.get(id), ts: 0, finished_ts: 1 }];
               });
-              messageParts.push({ type: "tool_call", tool_calls: toolCalls });
+              if (toolCalls.length) messageParts.push({ type: "tool_call", tool_calls: toolCalls });
             }
 
             const finalParts = messageParts.length ? messageParts : [{ type: "plain", text: "" }];
@@ -898,7 +799,7 @@ export default defineComponent({
   },
 
   mounted() {
-    this.fetchFilterOptions();
+    void this.fetchFilterOptions();
     this.fetchConversations();
   },
 
@@ -907,30 +808,11 @@ export default defineComponent({
       try {
         const response = await conversationApi.filterOptions();
         if (response.data.status === "ok") {
-          this.availablePlatforms = response.data.data.bots.map((bot) => ({
-            title: bot.type ? `${bot.id} (${bot.type})` : bot.id,
-            value: bot.id,
-          }));
+          this.filterBots = response.data.data.bots.filter((bot) => typeof bot.id === "string");
         }
-      } catch (error: unknown) {
-        console.warn("Failed to load conversation filter options:", error);
+      } catch (error) {
+        console.warn("Failed to load conversation bot filters:", error);
       }
-    },
-
-    cancelFilterRefresh() {
-      if (this.filterTimeout !== null) {
-        clearTimeout(this.filterTimeout);
-        this.filterTimeout = null;
-      }
-    },
-
-    scheduleFilterRefresh() {
-      this.invalidateConversationListRequest();
-      this.cancelFilterRefresh();
-      this.filterTimeout = setTimeout(() => {
-        this.pagination.page = 1;
-        this.fetchConversations();
-      }, 300);
     },
     // Monaco编辑器挂载后的回调
     onMonacoMounted(editor: editor.IStandaloneCodeEditor) {
@@ -977,7 +859,11 @@ export default defineComponent({
 
     // Extract error message from unknown
     getErrorMessage(error: unknown, fallback: string): string {
-      return resolveErrorMessage(error, fallback);
+      const err = error as {
+        response?: { data?: { message?: string } };
+        message?: string;
+      };
+      return err.response?.data?.message || err.message || fallback;
     },
 
     // 获取消息类型的显示文本
@@ -1056,7 +942,7 @@ export default defineComponent({
 
     // 获取对话列表
     async fetchConversations() {
-      this.cancelFilterRefresh();
+      this.debouncedApplyFilters?.cancel();
       this.listAbortController?.abort();
       const controller = new AbortController();
       const requestId = ++this.listRequestId;
@@ -1067,7 +953,6 @@ export default defineComponent({
       };
       this.listAbortController = markRaw(controller);
       this.listLoading = true;
-      this.listError = false;
 
       try {
         const params: Record<string, string | number | boolean> = {
@@ -1087,7 +972,7 @@ export default defineComponent({
           params.search = search;
         }
 
-        const response = await axios.get<ApiEnvelope<ConversationListData>>("/api/conversation/list", {
+        const response = await axios.get("/api/conversation/list", {
           signal: controller.signal,
           params,
         });
@@ -1126,8 +1011,7 @@ export default defineComponent({
           return;
         }
 
-        this.listError = true;
-        console.error("Failed to fetch conversations:", error);
+        console.error("获取对话列表出错:", error);
         this.showErrorMessage(this.getErrorMessage(error, this.tm("messages.fetchError")));
       } finally {
         if (requestId === this.listRequestId) {
@@ -1147,19 +1031,16 @@ export default defineComponent({
 
       try {
         console.info(`正在请求对话详情，user_id=${item.user_id}, cid=${item.cid}`);
-        const response = await axios.post<ApiEnvelope<ConversationItem & { history?: unknown }>>(
-          "/api/conversation/detail",
-          {
-            user_id: item.user_id,
-            cid: item.cid,
-          },
-        );
+        const response = await axios.post("/api/conversation/detail", {
+          user_id: item.user_id,
+          cid: item.cid,
+        });
 
         if (response.data.status === "ok") {
           try {
             const detailData = response.data.data || {};
             const mergedConversation = {
-              ...item,
+              ...this.selectedConversation,
               ...detailData,
             };
             const umoInfo = this.getConversationUmoInfo(mergedConversation);
@@ -1170,7 +1051,18 @@ export default defineComponent({
             };
             this.selectedConversation = mergedConversation;
 
-            this.conversationHistory = parseHistory(detailData.history ?? []);
+            const historyData = detailData.history ?? [];
+            const parsedHistory = typeof historyData === "string" ? JSON.parse(historyData) : historyData;
+            if (
+              !Array.isArray(parsedHistory) ||
+              parsedHistory.some(
+                (message) =>
+                  !message || typeof message !== "object" || Array.isArray(message) || typeof message.role !== "string",
+              )
+            ) {
+              throw new Error("Conversation history must be an array of messages");
+            }
+            this.conversationHistory = parsedHistory as HistoryMessage[];
             this.editedHistory = JSON.stringify(this.conversationHistory, null, 2);
           } catch (e) {
             this.conversationHistory = [];
@@ -1197,9 +1089,18 @@ export default defineComponent({
 
       try {
         // 验证JSON格式
-        let historyJson: HistoryMessage[];
+        let historyJson;
         try {
-          historyJson = parseHistory(this.editedHistory);
+          historyJson = JSON.parse(this.editedHistory);
+          if (
+            !Array.isArray(historyJson) ||
+            historyJson.some(
+              (message) =>
+                !message || typeof message !== "object" || Array.isArray(message) || typeof message.role !== "string",
+            )
+          ) {
+            throw new Error("Conversation history must be an array of messages");
+          }
         } catch (e) {
           this.showErrorMessage(this.tm("messages.invalidJson"));
           return;
@@ -1246,8 +1147,8 @@ export default defineComponent({
 
     // 保存编辑后的对话
     async saveConversation() {
-      const validation = await this.form?.validate();
-      if (!validation?.valid) return;
+      const validation = await (this.$refs.form as unknown as VFormRef).validate();
+      if (!validation.valid) return;
 
       this.actionLoading = true;
       try {
@@ -1485,8 +1386,8 @@ export default defineComponent({
     },
 
     // 将消息内容转换为 MessagePart[] 格式
-    convertContentToMessageParts(content: unknown): MessagePart[] {
-      const parts: MessagePart[] = [];
+    convertContentToMessageParts(content: unknown): MessageContentPart[] {
+      const parts: MessageContentPart[] = [];
 
       if (typeof content === "string") {
         // 纯文本内容
@@ -1498,13 +1399,13 @@ export default defineComponent({
         }
       } else if (Array.isArray(content)) {
         // 数组格式（OpenAI 格式）
-        content.filter(isRecord).forEach((item) => {
-          if (item.type === "text" && typeof item.text === "string" && item.text) {
+        content.forEach((item) => {
+          if (item.type === "text" && item.text) {
             parts.push({
               type: "plain",
               text: item.text,
             });
-          } else if (item.type === "image_url" && isRecord(item.image_url) && typeof item.image_url.url === "string") {
+          } else if (item.type === "image_url" && item.image_url?.url) {
             parts.push({
               type: "image",
               embedded_url: item.image_url.url,
@@ -1554,7 +1455,7 @@ export default defineComponent({
           .filter((item) => item.type === "text")
           .map((item) => item.text)
           .join("\n");
-      } else if (isRecord(content)) {
+      } else if (content !== null && typeof content === "object") {
         return Object.values(content)
           .filter((val) => typeof val === "string")
           .join("");
@@ -1588,12 +1489,11 @@ export default defineComponent({
   font-weight: 500;
 }
 
-/* 编辑模式：编辑器填满剩余高度，避免与外层滚动条叠加 */
 .conversation-detail-card--edit > .v-card-text {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .monaco-editor-container {
@@ -1616,24 +1516,25 @@ export default defineComponent({
 /* 让 ToolCallCard 内部的 args/result 自然展开，由外层容器统一滚动，避免双滚动条 */
 .conversation-messages-container .detail-json,
 .conversation-messages-container .detail-result {
-    max-height: none;
-    overflow: visible;
+  max-height: none;
+  overflow: visible;
 }
 
 /* 历史回放无真实状态数据，隐藏 IPython 工具的"已完成"标签，与其它工具卡片保持一致 */
 .conversation-messages-container .tool-call-inline-status {
-    display: none;
+  display: none;
 }
 
+/* 暗色模式下的聊天消息容器 */
+.v-theme--dark .conversation-messages-container {
+  background-color: #1e1e1e;
+}
+
+/* 对话详情卡片 */
 .conversation-detail-card {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-}
-
-/* Give Monaco a fixed-height flex ancestor in edit mode. */
-.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
-  flex: 0 0 90vh;
 }
 
 .text-truncate {
@@ -1727,7 +1628,6 @@ export default defineComponent({
 }
 
 .conversation-detail-title {
-  display: flex;
   align-items: flex-start;
 }
 
@@ -1736,7 +1636,6 @@ export default defineComponent({
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  width: 100%;
 }
 
 .conversation-detail-umo-parsed {
@@ -1771,5 +1670,8 @@ export default defineComponent({
     opacity: 1;
     transform: translateY(0);
   }
+}
+.v-dialog > .v-overlay__content > .conversation-detail-card--edit {
+  flex: 0 0 90vh;
 }
 </style>

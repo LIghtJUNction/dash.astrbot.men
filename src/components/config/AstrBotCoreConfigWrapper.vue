@@ -16,7 +16,7 @@
     </nav>
 
     <main
-      class="config-workspace__main"
+      class="config-workspace__main config-form astrbot-config-form"
       :class="{ 'config-workspace__main--readonly': readonly }"
     >
       <template v-for="section in visibleSections" :key="section.key">
@@ -33,10 +33,10 @@
         >
           <header class="config-standard-section__heading">
             <h2 class="config-standard-section__title">
-              {{ sharedTm("pluginSetSelector.title") }}
+              {{ sharedTm('pluginSetSelector.title') }}
             </h2>
             <p class="config-plugin-section__subtitle">
-              {{ sharedTm("pluginSetSelector.subtitle") }}
+              {{ sharedTm('pluginSetSelector.subtitle') }}
             </p>
           </header>
 
@@ -45,6 +45,11 @@
             :search-keyword="searchKeyword"
             inline
           />
+          <div v-if="config_data.disabled_plugins?.length" class="mt-8">
+            <h3 class="text-subtitle-1 mb-2">{{ tm('overrides.fields.disabledPlugins') }}</h3>
+            <p class="text-body-2 text-medium-emphasis mb-4">{{ tm('overrides.disabledPluginsHint') }}</p>
+            <PluginSetSelector v-model="config_data.disabled_plugins" selection-only />
+          </div>
         </section>
 
         <section
@@ -63,7 +68,7 @@
               :key="metadataKey"
               :metadata="{ [metadataKey]: sectionMetadata }"
               :iterable="config_data"
-              :metadata-key="metadataKey"
+              :metadata-key="String(metadataKey)"
               :search-keyword="searchKeyword"
             />
           </div>
@@ -72,40 +77,38 @@
 
       <div v-if="visibleSections.length === 0" class="config-workspace__empty">
         <v-icon size="34">mdi-magnify-close</v-icon>
-        <span>{{ tm("search.noResult") }}</span>
+        <span>{{ tm('search.noResult') }}</span>
       </div>
 
       <footer v-if="visibleSections.length > 0" class="config-workspace__help">
-        {{ tm("help.helpPrefix") }}
-        <a
-          href="https://docs.astrbot.app/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {{ tm("help.documentation") }}
+        {{ tm('help.helpPrefix') }}
+        <a href="https://docs.astrbot.app/" target="_blank" rel="noopener noreferrer">
+          {{ tm('help.documentation') }}
         </a>
-        {{ tm("help.helpMiddle") }}
+        {{ tm('help.helpMiddle') }}
         <a
           href="https://qm.qq.com/cgi-bin/qm/qr?k=EYGsuUTfe00_iOu9JTXS7_TEpMkXOvwv&jump_from=webapi&authKey=uUEMKCROfsseS+8IzqPjzV3y1tzy4AkykwTib2jNkOFdzezF9s9XknqnIaf3CDft"
           target="_blank"
           rel="noopener noreferrer"
         >
-          {{ tm("help.support") }} </a
-        >{{ tm("help.helpSuffix") }}
+          {{ tm('help.support') }}
+        </a>{{ tm('help.helpSuffix') }}
       </footer>
     </main>
   </div>
 </template>
 
-<script>
+<script lang="ts">
 import AiConfigPanel from "@/components/config/AiConfigPanel.vue";
 import AstrBotConfigV4 from "@/components/shared/AstrBotConfigV4.vue";
 import PluginSetSelector from "@/components/shared/PluginSetSelector.vue";
 import { useModuleI18n } from "@/i18n/composables";
+import { isRecord } from "@/utils/typeGuards";
 
-const SECTION_ORDER = ["ai_group", "plugin_group", "platform_group", "ext_group"];
-const SECTION_ICONS = {
+const SECTION_ORDER = ["ai_group", "platform_group", "access_group", "plugin_group", "ext_group"];
+const SECTION_ICONS: Record<string, string> = {
   ai_group: "mdi-auto-fix",
+  access_group: "mdi-account-lock-outline",
   plugin_group: "mdi-puzzle-outline",
   platform_group: "mdi-robot-outline",
   ext_group: "mdi-tune-variant",
@@ -143,7 +146,7 @@ export default {
     const { tm: tmMetadata } = useModuleI18n("features/config-metadata");
     const { tm: sharedTm } = useModuleI18n("core/shared");
 
-    const tm = (key) => {
+    const tm = (key: string) => {
       const metadataResult = tmMetadata(key);
       if (!metadataResult.startsWith("[MISSING:") && !metadataResult.startsWith("[INVALID:")) {
         return metadataResult;
@@ -155,7 +158,7 @@ export default {
   },
   data() {
     return {
-      tab: null,
+      tab: null as string | null,
     };
   },
   computed: {
@@ -188,9 +191,9 @@ export default {
     },
   },
   watch: {
-    visibleSections(newSections) {
+    visibleSections(newSections: Array<{ key: string }>) {
       const sectionKeys = newSections.map((section) => section.key);
-      if (!sectionKeys.includes(this.tab)) {
+      if (this.tab === null || !sectionKeys.includes(this.tab)) {
         this.tab = sectionKeys[0] ?? null;
       }
     },
@@ -199,28 +202,31 @@ export default {
     this.tab = this.visibleSections[0]?.key ?? null;
   },
   methods: {
-    getSectionIcon(sectionKey) {
+    getSectionIcon(sectionKey: string) {
       return SECTION_ICONS[sectionKey] || "mdi-cog-outline";
     },
-    sectionHasSearchMatch(section) {
+    sectionHasSearchMatch(section: unknown) {
       const keyword = this.normalizedSearchKeyword;
       if (!keyword) {
         return true;
       }
-      const sectionMetadata = section?.metadata || {};
+      const sectionMetadata = isRecord(section) && isRecord(section.metadata) ? section.metadata : {};
       return Object.values(sectionMetadata).some((metaItem) => this.metaObjectHasSearchMatch(metaItem, keyword));
     },
-    metaObjectHasSearchMatch(metaObject, keyword) {
-      if (!metaObject || typeof metaObject !== "object") {
+    metaObjectHasSearchMatch(metaObject: unknown, keyword: string): boolean {
+      if (!isRecord(metaObject)) {
         return false;
       }
-      const directText = [this.tm(metaObject.description || ""), this.tm(metaObject.hint || "")]
+      const directText = [
+        this.tm(typeof metaObject.description === "string" ? metaObject.description : ""),
+        this.tm(typeof metaObject.hint === "string" ? metaObject.hint : ""),
+      ]
         .join(" ")
         .toLowerCase();
       if (directText.includes(keyword)) {
         return true;
       }
-      return Object.entries(metaObject.items || {}).some(
+      return Object.entries(isRecord(metaObject.items) ? metaObject.items : {}).some(
         ([itemKey, itemMeta]) =>
           itemKey.toLowerCase().includes(keyword) || this.metaObjectHasSearchMatch(itemMeta, keyword),
       );
@@ -233,6 +239,7 @@ export default {
 .config-workspace {
   --config-border: rgba(17, 24, 39, 0.13);
   --config-divider: rgba(17, 24, 39, 0.09);
+  --config-form-divider: var(--config-divider);
   display: grid;
   grid-template-columns: 126px minmax(0, 1fr);
   gap: 34px;
@@ -258,7 +265,7 @@ export default {
   min-height: 34px;
   padding: 6px 9px 6px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
   color: rgba(var(--v-theme-on-surface), 0.64);
   cursor: pointer;
@@ -278,17 +285,6 @@ export default {
   background: rgba(var(--v-theme-on-surface), 0.07);
   color: rgb(var(--v-theme-on-surface));
   font-weight: 760;
-}
-
-.config-workspace__nav-item--active::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: rgba(var(--v-theme-on-surface), 0.52);
-  content: "";
 }
 
 .config-workspace__main {
@@ -332,7 +328,7 @@ export default {
   margin-bottom: 28px !important;
   overflow: hidden !important;
   border: 1px solid var(--config-border) !important;
-  border-radius: 10px !important;
+  border-radius: var(--astrbot-radius-card) !important;
   background: rgb(var(--v-theme-surface)) !important;
   box-shadow: none !important;
 }
@@ -353,96 +349,21 @@ export default {
 .config-standard-section__groups :deep(.config-hint),
 :deep(.config-product-groups .config-hint) {
   margin-top: 5px;
-  color: rgba(var(--v-theme-on-surface), 0.64) !important;
+  color: rgba(var(--v-theme-on-surface), 0.76) !important;
   font-size: 0.78rem;
   line-height: 1.45;
+  opacity: 1 !important;
   white-space: normal;
 }
 
-.config-standard-section__groups :deep(.config-row),
-:deep(.config-product-groups .config-row) {
-  min-height: 60px;
-  padding: 12px 16px;
-  border-radius: 0;
+.config-standard-section__groups :deep(.config-hint *),
+:deep(.config-product-groups .config-hint *) {
+  opacity: 1 !important;
 }
 
-.config-standard-section__groups :deep(.config-row:hover),
-:deep(.config-product-groups .config-row:hover) {
-  background: transparent;
-}
-
-.config-standard-section__groups :deep(.property-info),
-:deep(.config-product-groups .property-info) {
-  padding: 0 16px 0 0;
-}
-
-.config-standard-section__groups :deep(.property-info .v-list-item),
-:deep(.config-product-groups .property-info .v-list-item) {
-  padding: 0;
-}
-
-.config-standard-section__groups :deep(.property-name),
-:deep(.config-product-groups .property-name) {
-  color: rgb(var(--v-theme-on-surface));
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: normal;
-}
-
-.config-standard-section__groups :deep(.property-hint),
-:deep(.config-product-groups .property-hint) {
-  margin-top: 4px;
-  color: rgba(var(--v-theme-on-surface), 0.7) !important;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  white-space: normal;
-}
-
-.config-standard-section__groups :deep(.config-input),
-:deep(.config-product-groups .config-input) {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-  padding: 0;
-}
-
-.config-standard-section__groups
-  :deep(.config-input > :not(.config-field--full-width)),
-:deep(.config-product-groups .config-input > :not(.config-field--full-width)) {
-  width: 100%;
-  max-width: 270px;
-}
-
-.config-standard-section__groups :deep(.config-input .v-switch),
-:deep(.config-product-groups .config-input .v-switch) {
-  width: auto;
-  max-width: none;
-  margin-left: auto;
-}
-
-.config-standard-section__groups
-  :deep(.config-input .v-switch .v-input__control),
-:deep(.config-product-groups .config-input .v-switch .v-input__control) {
-  margin-left: auto;
-}
-
-.config-standard-section__groups
-  :deep(.config-input .v-switch .v-selection-control),
-:deep(.config-product-groups .config-input .v-switch .v-selection-control) {
-  justify-content: flex-end;
-}
-
-.config-standard-section__groups :deep(.v-field),
-:deep(.config-product-groups .v-field) {
-  border-radius: 10px;
-  background: transparent;
-}
-
-.config-standard-section__groups :deep(.config-divider),
-:deep(.config-product-groups .config-divider) {
-  margin-left: 0;
-  border-color: var(--config-divider);
+.config-standard-section__groups :deep(.config-hint a),
+:deep(.config-product-groups .config-hint a) {
+  color: rgb(var(--v-theme-primary)) !important;
 }
 
 .config-standard-section__groups :deep(.collapsed-config-toggle-row),
@@ -501,26 +422,9 @@ export default {
     border: 1px solid var(--config-border);
     background: rgb(var(--v-theme-surface));
   }
-
-  .config-standard-section__groups :deep(.config-row),
-  :deep(.config-product-groups .config-row) {
-    padding: 14px 16px;
-  }
-
-  .config-standard-section__groups :deep(.property-info),
-  :deep(.config-product-groups .property-info) {
-    padding-right: 0;
-  }
-
-  .config-standard-section__groups :deep(.config-input),
-  :deep(.config-product-groups .config-input) {
-    justify-content: stretch;
-    padding-top: 10px;
-  }
-
-  .config-standard-section__groups :deep(.config-input > *),
-  :deep(.config-product-groups .config-input > *) {
-    max-width: none;
-  }
 }
+</style>
+
+<style>
+@import "@/styles/config-form.css";
 </style>

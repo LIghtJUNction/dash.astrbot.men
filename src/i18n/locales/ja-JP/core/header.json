@@ -125,7 +125,11 @@
       "passwordLowercase": "パスワードには小文字を 1 文字以上含めてください",
       "passwordDigit": "パスワードには数字を 1 文字以上含めてください",
       "passwordMatch": "パスワードが一致しません",
-      "usernameMinLength": "ユーザー名は 3 文字以上にしてください"
+      "usernameMinLength": "ユーザー名は 3 文字以上にしてください",
+      "strengthWeak": "弱い",
+      "strengthFair": "普通",
+      "strengthGood": "良好",
+      "strengthStrong": "強い"
     },
     "actions": {
       "save": "変更を保存",
@@ -133,6 +137,7 @@
     },
     "messages": {
       "updateFailed": "変更に失敗しました。もう一度お試しください"
-    }
+    },
+    "securityWarningLegacy": "新しいバージョンの AstrBot ではセキュリティが強化されています。パスワードを変更してください。"
   }
 }

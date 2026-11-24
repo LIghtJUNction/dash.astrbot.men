@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, type PropType } from "vue";
+import { computed, ref } from "vue";
 import PluginPlatformChip from "@/components/shared/PluginPlatformChip.vue";
 import { useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
@@ -7,31 +7,9 @@ import { usePluginI18n } from "@/utils/pluginI18n";
 const { tm } = useModuleI18n("features/extension");
 const { pluginShortDesc } = usePluginI18n();
 
-interface MarketPlugin {
-  name: string;
-  market_plugin_id?: string | null;
-  display_name?: string | null;
-  trimmedName?: string;
-  author?: unknown;
-  logo?: string | null;
-  desc?: string | null;
-  short_desc?: string | null;
-  version?: string | null;
-  social_link?: string | null;
-  repo?: string | null;
-  tags?: string[];
-  support_platforms?: string[] | null;
-  stars?: number | null;
-  download_count?: number | null;
-  pinned?: boolean;
-  installed?: boolean;
-  astrbot_version_supported?: boolean;
-  i18n?: unknown;
-}
-
 const props = defineProps({
   plugin: {
-    type: Object as PropType<MarketPlugin>,
+    type: Object,
     required: true,
   },
   defaultPluginIcon: {
@@ -46,7 +24,7 @@ const props = defineProps({
 
 const emit = defineEmits(["install", "open"]);
 
-const normalizePlatformList = (platforms: unknown): string[] => {
+const normalizePlatformList = (platforms: unknown) => {
   if (!Array.isArray(platforms)) return [];
   return platforms.filter((item) => typeof item === "string");
 };
@@ -65,7 +43,7 @@ const hasDownloadCount = computed(() => {
   return props.plugin?.download_count !== undefined && props.plugin?.download_count !== null;
 });
 
-const handleInstall = (plugin: typeof props.plugin) => {
+const handleInstall = (plugin: Record<string, unknown>) => {
   if (!canInstallPlugin.value) return;
   emit("install", plugin);
 };
@@ -214,7 +192,7 @@ const handleOpen = () => {
           {{ tag === "danger" ? tm("tags.danger") : tag }}
         </v-chip>
         <PluginPlatformChip
-          :platforms="platformDisplayList"
+          :platforms="plugin.support_platforms"
           size="x-small"
           :chip-style="{ height: '20px' }"
         />

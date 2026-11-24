@@ -110,32 +110,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type PropType, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
+import { pluginApi } from "@/api/v1";
 import { useModuleI18n } from "@/i18n/composables";
-import axios from "@/utils/request";
 import { useToast } from "@/utils/toast";
-
-interface FileConfigResponse {
-  status: "ok" | "error";
-  message?: string;
-  data?: { files?: unknown[]; uploaded?: unknown[]; errors?: unknown[] };
-}
-
-interface FileItem {
-  path: string;
-  status: "ok" | "missing" | "unconfigured";
-}
-
-const stringItems = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+import { stringArray } from "@/utils/typeGuards";
 
 const props = defineProps({
   modelValue: {
-    type: Array as PropType<unknown[]>,
+    type: Array,
     default: () => [],
   },
   itemMeta: {
-    type: Object as PropType<object>,
+    type: Object,
     default: null,
   },
   pluginName: {
@@ -161,15 +148,15 @@ const MAX_FILE_BYTES = 500 * 1024 * 1024;
 const MAX_FILE_MB = 500;
 const directoryFiles = ref<string[]>([]);
 
-const fileList = computed<string[]>({
-  get: () => stringItems(props.modelValue),
+const fileList = computed({
+  get: () => stringArray(props.modelValue),
   set: (val) => emit("update:modelValue", val),
 });
 
 const mergedFileItems = computed(() => {
   const configured = new Set(fileList.value);
   const existing = new Set(directoryFiles.value);
-  const items: FileItem[] = [];
+  const items = [];
 
   for (const path of fileList.value) {
     items.push({
@@ -190,20 +177,20 @@ const mergedFileItems = computed(() => {
   return items;
 });
 
-const fileTypes = computed<unknown[]>(() => {
-  const metadata = props.itemMeta;
-  const types = metadata && "file_types" in metadata ? metadata.file_types : undefined;
-  return Array.isArray(types) ? types : [];
-});
-
 const acceptAttr = computed(() => {
-  const types = fileTypes.value;
-  if (types.length === 0) return undefined;
+  const types = props.itemMeta?.file_types;
+  if (!Array.isArray(types) || types.length === 0) {
+    return undefined;
+  }
   return types.map((ext) => `.${String(ext).replace(/^\\./, "")}`).join(",");
 });
 
 const allowedTypesText = computed(() => {
-  return fileTypes.value.map((ext) => String(ext).replace(/^\\./, "")).join(", ");
+  const types = props.itemMeta?.file_types;
+  if (!Array.isArray(types) || types.length === 0) {
+    return "";
+  }
+  return types.map((ext) => String(ext).replace(/^\\./, "")).join(", ");
 });
 
 const fileCountText = computed(() => {
@@ -241,13 +228,9 @@ const loadDirectoryFiles = async () => {
 
   loadingFiles.value = true;
   try {
-    const response = await axios.get<FileConfigResponse>(
-      `/api/config/file/get?scope=plugin&name=${encodeURIComponent(
-        props.pluginName,
-      )}&key=${encodeURIComponent(props.configKey)}`,
-    );
+    const response = await pluginApi.listConfigFiles(props.pluginName, props.configKey);
     if (response.data.status === "ok") {
-      const files = stringItems(response.data.data?.files);
+      const files = response.data.data?.files || [];
       directoryFiles.value = Array.from(new Set(files));
     } else {
       toast.warning(response.data.message || tm("fileUpload.loadFailed"));
@@ -266,7 +249,9 @@ const handleFileSelect = (event: Event): void => {
   if (target.files && target.files.length > 0) {
     uploadFiles(Array.from(target.files));
   }
-  target.value = "";
+  if (target) {
+    target.value = "";
+  }
 };
 
 const handleDrop = (event: DragEvent): void => {
@@ -303,17 +288,11 @@ const uploadFiles = async (files: File[]): Promise<void> => {
       formData.append(`file${index}`, file);
     });
 
-    const response = await axios.post<FileConfigResponse>(
-      `/api/config/file/upload?scope=plugin&name=${encodeURIComponent(
-        props.pluginName,
-      )}&key=${encodeURIComponent(props.configKey)}`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } },
-    );
+    const response = await pluginApi.uploadConfigFiles(props.pluginName, props.configKey, formData);
 
     if (response.data.status === "ok") {
-      const uploaded = stringItems(response.data.data?.uploaded);
-      const errors = stringItems(response.data.data?.errors);
+      const uploaded = stringArray(response.data.data?.uploaded);
+      const errors = response.data.data?.errors || [];
 
       if (uploaded.length > 0) {
         const merged = [...fileList.value];
@@ -355,12 +334,10 @@ const deleteFile = (filePath: string): void => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
-    axios
-      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
-      .catch((error) => {
-        console.warn("Staged file delete failed:", error);
-        toast.warning(tm("fileUpload.deleteFailed"));
-      });
+    pluginApi.deleteConfigFile(props.pluginName, { path: filePath }).catch((error) => {
+      console.warn("Staged file delete failed:", error);
+      toast.warning(tm("fileUpload.deleteFailed"));
+    });
   }
 
   toast.success(tm("fileUpload.deleteSuccess"));
@@ -370,12 +347,10 @@ const deletePhysicalFile = (filePath: string): void => {
   directoryFiles.value = directoryFiles.value.filter((item) => item !== filePath);
 
   if (props.pluginName) {
-    axios
-      .post(`/api/config/file/delete?scope=plugin&name=${encodeURIComponent(props.pluginName)}`, { path: filePath })
-      .catch((error) => {
-        console.warn("File delete failed:", error);
-        toast.warning(tm("fileUpload.deleteFailed"));
-      });
+    pluginApi.deleteConfigFile(props.pluginName, { path: filePath }).catch((error) => {
+      console.warn("File delete failed:", error);
+      toast.warning(tm("fileUpload.deleteFailed"));
+    });
   }
 
   toast.success(tm("fileUpload.deleteSuccess"));

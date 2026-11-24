@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ChevronRight, Minus, Plus } from "@lucide/vue";
 import DOMPurify from "dompurify";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import { computed, ref, watch } from "vue";
 import { useModuleI18n } from "@/i18n/composables";
 
@@ -45,90 +45,88 @@ type PreviewPart = {
 };
 
 const records = computed(() =>
-  props.messages
-    .filter((entry) => !entry || typeof entry !== "object" || !("role" in entry) || entry.role !== "_checkpoint")
-    .map((entry) => {
-      const message =
-        entry && typeof entry === "object" && !Array.isArray(entry)
-          ? (entry as Record<string, unknown>)
-          : { content: entry };
-      const role = typeof message.role === "string" ? message.role : "unknown";
-      const parts: PreviewPart[] = [];
-      const content = Array.isArray(message.content) ? message.content : [message.content];
+  props.messages.map((entry) => {
+    const message =
+      entry && typeof entry === "object" && !Array.isArray(entry)
+        ? (entry as Record<string, unknown>)
+        : { content: entry };
+    const role = typeof message.role === "string" ? message.role : "unknown";
+    const parts: PreviewPart[] = [];
+    const content = Array.isArray(message.content) ? message.content : [message.content];
 
-      // Preserve unsupported content as data instead of silently dropping it.
-      for (const item of content) {
-        if (item == null) continue;
-        if (typeof item === "string" || (item?.type === "text" && typeof item.text === "string")) {
-          const text = typeof item === "string" ? item : item.text;
-          if (text.length) {
-            parts.push({
-              kind: "text",
-              text,
-              html: markdownEnabled.value
-                ? DOMPurify.sanitize(markdown.render(text), {
-                    USE_PROFILES: { html: true },
-                  })
-                : undefined,
-            });
-          }
-        } else if (
-          item?.type === "image_url" &&
-          typeof item.image_url?.url === "string" &&
-          /^(https?:\/\/|data:image\/(png|jpeg|jpg|gif|webp);base64,)/i.test(item.image_url.url)
-        ) {
-          parts.push({ kind: "image", text: item.image_url.url });
-        } else {
-          parts.push({ kind: "data", text: JSON.stringify(item, null, 2) });
-        }
-      }
-
-      if (typeof message.reasoning_content === "string" && message.reasoning_content) {
-        parts.push({
-          kind: "data",
-          label: tm("workspace.preview.reasoning"),
-          text: message.reasoning_content,
-        });
-      }
-
-      if (Array.isArray(message.tool_calls)) {
-        for (const call of message.tool_calls) {
-          let data = call;
-          const fn = call?.function;
-          if (fn && typeof fn.arguments === "string") {
-            try {
-              data = {
-                ...call,
-                function: { ...fn, arguments: JSON.parse(fn.arguments) },
-              };
-            } catch {
-              // Incomplete or non-JSON arguments remain visible exactly as recorded.
-            }
-          }
+    // Preserve unsupported content as data instead of silently dropping it.
+    for (const item of content) {
+      if (item == null) continue;
+      if (typeof item === "string" || (item?.type === "text" && typeof item.text === "string")) {
+        const text = typeof item === "string" ? item : item.text;
+        if (text.length) {
           parts.push({
-            kind: "data",
-            label: `${tm("workspace.preview.toolCall")}${typeof fn?.name === "string" ? ` · ${fn.name}` : ""}`,
-            text: JSON.stringify(data, null, 2),
+            kind: "text",
+            text,
+            html: markdownEnabled.value
+              ? DOMPurify.sanitize(markdown.render(text), {
+                  USE_PROFILES: { html: true },
+                })
+              : undefined,
           });
         }
+      } else if (
+        item?.type === "image_url" &&
+        typeof item.image_url?.url === "string" &&
+        /^(https?:\/\/|data:image\/(png|jpeg|jpg|gif|webp);base64,)/i.test(item.image_url.url)
+      ) {
+        parts.push({ kind: "image", text: item.image_url.url });
+      } else {
+        parts.push({ kind: "data", text: JSON.stringify(item, null, 2) });
       }
+    }
 
-      if (!parts.length && !Object.hasOwn(message, "content")) {
-        parts.push({ kind: "data", text: JSON.stringify(entry, null, 2) });
+    if (typeof message.reasoning_content === "string" && message.reasoning_content) {
+      parts.push({
+        kind: "data",
+        label: tm("workspace.preview.reasoning"),
+        text: message.reasoning_content,
+      });
+    }
+
+    if (Array.isArray(message.tool_calls)) {
+      for (const call of message.tool_calls) {
+        let data = call;
+        const fn = call?.function;
+        if (fn && typeof fn.arguments === "string") {
+          try {
+            data = {
+              ...call,
+              function: { ...fn, arguments: JSON.parse(fn.arguments) },
+            };
+          } catch {
+            // Incomplete or non-JSON arguments remain visible exactly as recorded.
+          }
+        }
+        parts.push({
+          kind: "data",
+          label: `${tm("workspace.preview.toolCall")}${typeof fn?.name === "string" ? ` · ${fn.name}` : ""}`,
+          text: JSON.stringify(data, null, 2),
+        });
       }
+    }
 
-      return {
-        role,
-        label: knownRoles.includes(role)
-          ? tm(`workspace.preview.roles.${role}`)
-          : role === "unknown"
-            ? tm("status.unknown")
-            : role,
-        name: typeof message.name === "string" ? message.name : "",
-        toolCallId: typeof message.tool_call_id === "string" ? message.tool_call_id : "",
-        parts,
-      };
-    }),
+    if (!parts.length && !Object.prototype.hasOwnProperty.call(message, "content")) {
+      parts.push({ kind: "data", text: JSON.stringify(entry, null, 2) });
+    }
+
+    return {
+      role,
+      label: knownRoles.includes(role)
+        ? tm(`workspace.preview.roles.${role}`)
+        : role === "unknown"
+          ? tm("status.unknown")
+          : role,
+      name: typeof message.name === "string" ? message.name : "",
+      toolCallId: typeof message.tool_call_id === "string" ? message.tool_call_id : "",
+      parts,
+    };
+  }),
 );
 </script>
 

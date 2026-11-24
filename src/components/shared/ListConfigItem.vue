@@ -22,8 +22,8 @@
       </span>
       <div v-else class="d-flex flex-wrap ga-2">
         <v-chip
-          v-for="item in displayItems"
-          :key="item"
+          v-for="(item, index) in displayItems"
+          :key="index"
           size="x-small"
           label
           color="primary"
@@ -31,7 +31,7 @@
           {{
             secret && !secretVisible
               ? "••••••••"
-              : item.length > 20
+              : typeof item === "string" && item.length > 20
                 ? item.slice(0, 20) + "..."
                 : item
           }}
@@ -228,7 +228,7 @@ const { t } = useI18n();
 
 const props = defineProps({
   modelValue: {
-    type: Array as PropType<string[]>,
+    type: Array as PropType<unknown[]>,
     default: () => [],
   },
   label: {
@@ -257,22 +257,22 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits<{ "update:modelValue": [value: string[]] }>();
+const emit = defineEmits<{ "update:modelValue": [value: unknown[]] }>();
 
 const secretVisible = ref(false);
 const secretInputType = computed(() => (props.secret && !secretVisible.value ? "password" : "text"));
 const secretToggleIcon = computed(() => (props.secret ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined));
 const dialog = ref(false);
-const localItems = ref<string[]>([]);
-const originalItems = ref<string[]>([]);
+const localItems = ref<unknown[]>([]);
+const originalItems = ref<unknown[]>([]);
 const newItem = ref("");
 const editIndex = ref(-1);
-const editItem = ref("");
+const editItem = ref<unknown>("");
 const showBatchImport = ref(false);
 const batchImportText = ref("");
 const isSingleItemMode = computed(() => (props.modelValue?.length ?? 0) <= 1 && props.preferSingleItem);
 const singleItemValue = computed({
-  get: (): string => props.modelValue[0] ?? "",
+  get: (): unknown => props.modelValue[0] ?? "",
   set: (input: string | null) => {
     const value = normalizeTextInput(input);
     // Emit an empty list when the input is blank.
@@ -309,7 +309,7 @@ const batchImportPreviewCount = computed(() => {
 // 监听 modelValue 变化，同步到 localItems，并清理空字符串
 watch(
   () => props.modelValue,
-  (newValue: string[]) => {
+  (newValue: unknown[]) => {
     localItems.value = [...(newValue || [])];
 
     // 自动清理只包含空字符串的数组
@@ -347,7 +347,7 @@ function removeItem(index: number) {
   localItems.value.splice(index, 1);
 }
 
-function startEdit(index: number, item: string) {
+function startEdit(index: number, item: unknown) {
   editIndex.value = index;
   editItem.value = item;
 }

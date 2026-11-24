@@ -1,5 +1,5 @@
 <template>
-  <div class="html-genui-node" :class="{ 'is-dark': darkMode, 'is-loading': isLoading }">
+  <div class="html-genui-node" :class="{ 'is-dark': isDarkTheme, 'is-loading': isLoading }">
     <div class="html-genui-header">
       <div class="html-genui-title">{{ panelTitle }}</div>
       <div class="html-genui-toggle" role="tablist" aria-label="HTML GenUI view">
@@ -63,11 +63,11 @@ let lastRenderAt = 0;
 
 const htmlContent = computed(() => stripHtmlGenUiWrapper(String(props.node?.content || props.node?.raw || "")));
 const isLoading = computed(() => Boolean(props.loading || props.node?.loading));
-const darkMode = computed(() => Boolean(props.isDark));
+const isDarkTheme = computed(() => Boolean(props.isDark));
 const panelTitle = computed(() => props.title?.trim() || attrValue("title") || "HTML UI");
 
 watch(
-  [htmlContent, isLoading, darkMode],
+  [htmlContent, isLoading, isDarkTheme],
   () => {
     scheduleRender(!isLoading.value);
   },
@@ -104,7 +104,7 @@ function renderNow() {
     pendingTimer = null;
   }
   lastRenderAt = Date.now();
-  renderedSrcdoc.value = buildSrcdoc(htmlContent.value, darkMode.value);
+  renderedSrcdoc.value = buildSrcdoc(htmlContent.value, isDarkTheme.value);
 }
 
 function stripHtmlGenUiWrapper(value: string) {

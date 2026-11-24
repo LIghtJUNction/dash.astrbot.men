@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import DOMPurify from "dompurify";
 import hljs from "highlight.js";
-import MarkdownIt from "markdown-it";
+import MarkdownIt from "markdown-it-ts";
 import { computed, onUnmounted, ref, watch } from "vue";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
-import axios from "@/utils/request";
+import { useTheme } from "vuetify";
+import { pluginApi, statsApi } from "@/api/v1";
 import "highlight.js/styles/github.css";
 import { useI18n } from "@/i18n/composables";
 
@@ -36,7 +36,7 @@ const props = defineProps({
   mode: {
     type: String,
     default: "readme",
-    validator: (value: unknown) => typeof value === "string" && ["readme", "changelog", "first-notice"].includes(value),
+    validator: (value) => typeof value === "string" && ["readme", "changelog", "first-notice"].includes(value),
   },
 });
 
@@ -170,7 +170,7 @@ const renderedHtml = computed(() => {
   const tempDiv = document.createElement("div");
   tempDiv.innerHTML = cleanHtml;
 
-  const slugCounts = new Map<string, number>();
+  const slugCounts = new Map();
   tempDiv.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((heading) => {
     if (heading.id) {
       slugCounts.set(heading.id, (slugCounts.get(heading.id) || 0) + 1);
@@ -243,23 +243,22 @@ async function fetchContent() {
   isEmpty.value = false;
 
   try {
-    let params;
-    if (requiresPluginName.value) {
-      params = { name: props.pluginName };
-    } else if (props.mode === "first-notice") {
-      params = { locale: locale.value };
-    }
-    const res = await axios.get(modeConfig.value.apiPath, { params });
+    const res =
+      props.mode === "changelog"
+        ? await pluginApi.changelog(props.pluginName)
+        : props.mode === "readme"
+          ? await pluginApi.readme(props.pluginName)
+          : await statsApi.firstNotice(locale.value);
     if (requestId !== lastRequestId.value) return;
 
     if (res.data.status === "ok") {
-      if (res.data.data.content) content.value = res.data.data.content;
+      if (typeof res.data.data.content === "string" && res.data.data.content) content.value = res.data.data.content;
       else isEmpty.value = true;
     } else {
-      error.value = res.data.message;
+      error.value = res.data.message ?? null;
     }
   } catch (err: unknown) {
-    if (requestId === lastRequestId.value) error.value = resolveErrorMessage(err, t("core.common.error"));
+    if (requestId === lastRequestId.value) error.value = err instanceof Error ? err.message : String(err);
   } finally {
     if (requestId === lastRequestId.value) loading.value = false;
   }
@@ -279,7 +278,7 @@ function handleContainerClick(event: MouseEvent) {
   const clickTarget = event.target;
   if (!(clickTarget instanceof Element)) return;
   const btn = clickTarget.closest(".copy-code-btn");
-  if (btn instanceof HTMLElement) {
+  if (btn) {
     const code = btn.closest(".code-block-wrapper")?.querySelector("code");
     if (code) {
       if (navigator.clipboard?.writeText) {
@@ -308,7 +307,7 @@ function handleContainerClick(event: MouseEvent) {
   target.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function tryFallbackCopy(text: string, btn: HTMLElement) {
+function tryFallbackCopy(text: string, btn: Element) {
   try {
     const textArea = document.createElement("textarea");
     textArea.value = text;
@@ -332,7 +331,8 @@ function tryFallbackCopy(text: string, btn: HTMLElement) {
   }
 }
 
-function showCopyFeedback(btn: HTMLElement, success: boolean) {
+function showCopyFeedback(btn: Element, success: boolean) {
+  if (!(btn instanceof HTMLElement)) return;
   if (copyFeedbackTimer.value) clearTimeout(copyFeedbackTimer.value);
   btn.setAttribute("title", t(`core.common.${success ? "copied" : "error"}`));
   btn.innerHTML = success ? ICONS.SUCCESS : ICONS.ERROR;

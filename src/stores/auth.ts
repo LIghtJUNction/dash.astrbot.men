@@ -9,7 +9,10 @@ import {
   UPGRADE_RECOVERY_TOKEN_KEY,
   type VersionData,
 } from "@/api/v1";
+import { useProviderModelSelection } from "@/composables/useProviderModelSelection";
 import { router } from "@/router";
+import { useCustomizerStore } from "@/stores/customizer";
+import { chatPreferences } from "@/utils/chatPreferences";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -21,6 +24,8 @@ export const useAuthStore = defineStore("auth", {
       this.username = data.username;
       localStorage.setItem("user", this.username);
       localStorage.setItem("token", data.token);
+      useProviderModelSelection();
+      useCustomizerStore().chatNavigationInSidebar = chatPreferences().global.navigationInSidebar === true;
       const passwordUpgradeRequired = !!data?.password_upgrade_required;
       const md5PwdHint = !!data?.md5_pwd_hint;
       const passwordWarning = !!data?.change_pwd_hint || (md5PwdHint && !passwordUpgradeRequired);
@@ -58,7 +63,7 @@ export const useAuthStore = defineStore("auth", {
       password: string,
       code?: string,
       trustDeviceToken = false,
-    ): Promise<"totp_required" | "upgrade_recovery_required" | void> {
+    ): Promise<"totp_required" | "upgrade_recovery_required" | undefined> {
       try {
         const res = await authApi.login({
           username,
@@ -158,11 +163,17 @@ export const useAuthStore = defineStore("auth", {
     },
     logout() {
       this.username = "";
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      localStorage.removeItem("change_pwd_hint");
-      localStorage.removeItem("md5_pwd_hint");
-      localStorage.removeItem("password_upgrade_required");
+      useProviderModelSelection().resetSelection();
+      useCustomizerStore().chatNavigationInSidebar = false;
+      try {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+        localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
+        localStorage.removeItem("password_upgrade_required");
+      } catch {
+        // Storage availability must not prevent logout or the in-memory reset.
+      }
       void authApi.logout().catch(() => undefined);
       router.push("/auth/login");
     },

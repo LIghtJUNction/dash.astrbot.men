@@ -763,13 +763,11 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
 import type { ApiEnvelope } from "@/api/v1";
 import ConsoleDisplayer from "@/components/shared/ConsoleDisplayer.vue";
 import { useModuleI18n } from "@/i18n/composables";
-import { resolveErrorMessage } from "@/utils/errorUtils.js";
 import { normalizeTextInput } from "@/utils/inputValue";
-import axios from "@/utils/request";
+import axios, { isAxiosError } from "@/utils/request";
 
 interface ProviderConfig {
   id: string;
@@ -800,6 +798,22 @@ interface NewKBData {
   rerank_provider_id: string | null;
 }
 
+interface KBSearchResult {
+  content: string;
+  score?: number;
+  metadata?: { source?: string };
+}
+
+interface ImportOptions {
+  use_llm_repair: boolean;
+  use_clustering_summary: boolean;
+  repair_llm_provider_id: string | null;
+  summarize_llm_provider_id: string | null;
+  embedding_provider_id: string | null;
+  chunk_size: number | string | null;
+  chunk_overlap: number | string | null;
+}
+
 interface ImportTaskData {
   status: string;
   task_id?: string;
@@ -818,13 +832,7 @@ interface ImportTaskTopic {
   topic_summary?: string;
 }
 
-interface KnowledgeSearchResult {
-  content: string;
-  metadata?: { source?: string };
-  score?: number;
-}
-
-export default defineComponent({
+export default {
   name: "KnowledgeBase",
   components: {
     ConsoleDisplayer,
@@ -834,10 +842,24 @@ export default defineComponent({
     return { tm };
   },
   data() {
+    const kbCollections: KBCollection[] = [];
+    const searchResults: KBSearchResult[] = [];
+    const embeddingProviderConfigs: ProviderConfig[] = [];
+    const rerankProviderConfigs: ProviderConfig[] = [];
+    const llmProviderConfigs: ProviderConfig[] = [];
+    const importOptions: ImportOptions = {
+      use_llm_repair: true,
+      use_clustering_summary: false,
+      repair_llm_provider_id: null,
+      summarize_llm_provider_id: null,
+      embedding_provider_id: null,
+      chunk_size: 300,
+      chunk_overlap: 50,
+    };
     return {
       installed: true,
       installing: false,
-      kbCollections: [] as KBCollection[],
+      kbCollections,
       showCreateDialog: false,
       showEmojiPicker: false,
       newKB: {
@@ -912,7 +934,7 @@ export default defineComponent({
       overlap: null as number | null,
       uploading: false,
       searchQuery: "",
-      searchResults: [] as KnowledgeSearchResult[],
+      searchResults,
       searching: false,
       searchPerformed: false,
       topK: 5,
@@ -921,22 +943,16 @@ export default defineComponent({
         collection_name: "",
       },
       deleting: false,
-      embeddingProviderConfigs: [] as ProviderConfig[],
-      rerankProviderConfigs: [] as ProviderConfig[],
-      llmProviderConfigs: [] as ProviderConfig[],
+      embeddingProviderConfigs,
+      rerankProviderConfigs,
+      llmProviderConfigs,
       // URL导入相关数据
       importUrl: "",
-      importOptions: {
-        use_llm_repair: true,
-        use_clustering_summary: false,
-        repair_llm_provider_id: null as string | null,
-        summarize_llm_provider_id: null as string | null,
-        embedding_provider_id: null as string | null,
-        chunk_size: 300,
-        chunk_overlap: 50,
-      },
+      importOptions,
       importing: false,
-      pollingInterval: null as ReturnType<typeof setInterval> | null,
+      pollingInterval: null as number | null,
+      pollingGeneration: 0,
+      isUnmounted: false,
       // 插件更新相关
       checkingUpdate: false,
       updatingPlugin: false,
@@ -987,10 +1003,12 @@ export default defineComponent({
     this.getProviderList();
   },
   beforeUnmount() {
-    this.stopPolling();
+    this.isUnmounted = true;
+    this.importing = false;
+    this.stopTaskPolling();
   },
   methods: {
-    onSearchQueryInput(value: string) {
+    onSearchQueryInput(value: unknown) {
       this.searchQuery = normalizeTextInput(value);
     },
     getSelectedGitHubProxy() {
@@ -1007,16 +1025,16 @@ export default defineComponent({
     },
     embeddingModelProps(providerConfig: ProviderConfig) {
       return {
-        title: providerConfig.embedding_model,
+        title: providerConfig.embedding_model || providerConfig.id,
         subtitle: this.tm("createDialog.providerInfo", {
           id: providerConfig.id,
-          dimensions: providerConfig.embedding_dimensions ?? "N/A",
+          dimensions: providerConfig.embedding_dimensions ?? "",
         }),
       };
     },
     rerankModelProps(providerConfig: ProviderConfig) {
       return {
-        title: providerConfig.rerank_model,
+        title: providerConfig.rerank_model || providerConfig.id,
         subtitle: this.tm("createDialog.rerankProviderInfo", {
           id: providerConfig.id,
         }),
@@ -1224,7 +1242,7 @@ export default defineComponent({
       // 重置URL导入相关数据
       this.importUrl = "";
       this.importing = false;
-      this.stopPolling();
+      this.stopTaskPolling();
     },
 
     triggerFileInput() {
@@ -1234,7 +1252,8 @@ export default defineComponent({
 
     onFileSelected(event: Event) {
       const target = event.target;
-      const files = target instanceof HTMLInputElement ? target.files : null;
+      if (!(target instanceof HTMLInputElement)) return;
+      const files = target.files;
       if (files && files.length > 0) {
         this.selectedFile = files[0];
       }
@@ -1286,7 +1305,7 @@ export default defineComponent({
         formData.append("chunk_size", String(this.chunkSize));
       }
 
-      if (this.overlap && this.overlap >= 0) {
+      if (this.overlap !== null && this.overlap >= 0) {
         formData.append("chunk_overlap", String(this.overlap));
       }
 
@@ -1331,7 +1350,7 @@ export default defineComponent({
       this.searchPerformed = true;
 
       axios
-        .get<ApiEnvelope<KnowledgeSearchResult[]>>(`/api/plug/alkaid/kb/collection/search`, {
+        .get<ApiEnvelope<KBSearchResult[] | null>>("/api/plug/alkaid/kb/collection/search", {
           params: {
             collection_name: this.currentKB.collection_name,
             query,
@@ -1447,6 +1466,8 @@ export default defineComponent({
         return;
       }
 
+      this.stopTaskPolling();
+      const requestGeneration = this.pollingGeneration;
       this.importing = true;
 
       try {
@@ -1459,6 +1480,7 @@ export default defineComponent({
 
         console.info("Starting URL import with payload:", JSON.stringify(payload, null, 2));
         const addTaskResponse = await axios.post<ImportTaskData>("/api/plug/url_2_kb/add", payload);
+        if (this.isUnmounted || !this.importing || requestGeneration !== this.pollingGeneration) return;
 
         if (!addTaskResponse.data.task_id) {
           throw new Error(addTaskResponse.data.message || "Failed to start import task: No task_id received.");
@@ -1467,56 +1489,76 @@ export default defineComponent({
         const taskId = addTaskResponse.data.task_id;
         this.pollTaskStatus(taskId);
       } catch (error: unknown) {
-        const errorMessage = resolveErrorMessage(error, "An unknown error occurred.");
+        if (this.isUnmounted || requestGeneration !== this.pollingGeneration) return;
+        let errorMessage = "An unknown error occurred.";
+        if (isAxiosError<{ message?: string }>(error)) {
+          errorMessage = error.response?.data?.message || error.message || errorMessage;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         this.showSnackbar(`Error: ${errorMessage}`, "error");
         this.importing = false;
       }
     },
 
-    stopPolling() {
-      if (this.pollingInterval !== null) {
-        clearInterval(this.pollingInterval);
-        this.pollingInterval = null;
-      }
+    stopTaskPolling() {
+      this.pollingGeneration += 1;
+      if (this.pollingInterval !== null) clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
     },
-
     pollTaskStatus(taskId: string) {
-      this.stopPolling();
-      const interval = setInterval(async () => {
+      this.stopTaskPolling();
+      if (this.isUnmounted || !this.importing) return;
+      const generation = this.pollingGeneration;
+      let requestInFlight = false;
+      this.pollingInterval = window.setInterval(async () => {
+        if (requestInFlight || this.isUnmounted || generation !== this.pollingGeneration) return;
+        requestInFlight = true;
         try {
-          const statusResponse = await axios.post<ImportTaskData>(`/api/plug/url_2_kb/status`, {
+          const statusResponse = await axios.post<ImportTaskData>("/api/plug/url_2_kb/status", {
             task_id: taskId,
           });
 
-          if (this.pollingInterval !== interval) return;
+          if (this.isUnmounted || generation !== this.pollingGeneration) return;
           const taskData = statusResponse.data;
           const taskStatus = taskData.status;
 
           if (taskStatus === "completed") {
-            this.stopPolling();
+            this.stopTaskPolling();
             this.showSnackbar(this.tm("importFromUrl.uploadingChunks"), "info");
             await this.handleImportResult(taskData);
           } else if (taskStatus === "failed") {
-            this.stopPolling();
+            this.stopTaskPolling();
             const failureReason =
               typeof taskData.result === "string" ? taskData.result : taskData.message || "Unknown reason.";
             this.showSnackbar(`${this.tm("importFromUrl.importFailed")}: ${failureReason}`, "error");
             this.importing = false;
           }
         } catch (error: unknown) {
-          if (this.pollingInterval !== interval) return;
-          this.stopPolling();
-          const errorMessage = resolveErrorMessage(error, "An unknown error occurred during polling.");
+          if (this.isUnmounted || generation !== this.pollingGeneration) return;
+          this.stopTaskPolling();
+          let errorMessage = "An unknown error occurred during polling.";
+          if (isAxiosError<{ message?: string }>(error)) {
+            errorMessage = error.response?.data?.message || error.message || errorMessage;
+          } else if (error instanceof Error) {
+            errorMessage = error.message;
+          }
           this.showSnackbar(`Polling Error: ${errorMessage}`, "error");
           this.importing = false;
+        } finally {
+          requestInFlight = false;
         }
       }, 3000);
-      this.pollingInterval = interval;
     },
 
-    async handleImportResult(data: ImportTaskData) {
+    async handleImportResult(data: ImportTaskData): Promise<void> {
       const chunks: Array<{ content: string; filename: string }> = [];
-      const result = typeof data.result === "object" && data.result !== null ? data.result : {};
+      const result = data.result;
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        this.showSnackbar("Import task completed without valid result data.", "error");
+        this.importing = false;
+        return;
+      }
 
       // 1. Handle overall summary
       if (result.overall_summary) {
@@ -1541,8 +1583,10 @@ export default defineComponent({
       // 3. Handle noise points
       if (result.noise_points && result.noise_points.length > 0) {
         result.noise_points.forEach((point, index) => {
-          const content = typeof point === "string" ? point : point.text;
-          chunks.push({ content: content, filename: `noise_${index + 1}.txt` });
+          const content = typeof point === "string" ? point : point?.text;
+          if (typeof content === "string" && content.trim()) {
+            chunks.push({ content, filename: `noise_${index + 1}.txt` });
+          }
         });
       }
 
@@ -1585,11 +1629,14 @@ export default defineComponent({
       formData.append("file", file);
       formData.append("collection_name", this.currentKB.collection_name);
 
-      if (this.importOptions.chunk_size && this.importOptions.chunk_size > 0) {
-        formData.append("chunk_size", String(this.importOptions.chunk_size));
+      const chunkSize = Number(this.importOptions.chunk_size);
+      if (Number.isFinite(chunkSize) && chunkSize > 0) {
+        formData.append("chunk_size", String(chunkSize));
       }
-      if (this.importOptions.chunk_overlap && this.importOptions.chunk_overlap >= 0) {
-        formData.append("chunk_overlap", String(this.importOptions.chunk_overlap));
+      const overlap = this.importOptions.chunk_overlap;
+      const chunkOverlap = Number(overlap);
+      if (overlap !== null && overlap !== "" && Number.isFinite(chunkOverlap) && chunkOverlap >= 0) {
+        formData.append("chunk_overlap", String(chunkOverlap));
       }
 
       const response = await axios.post("/api/plug/alkaid/kb/collection/add_file", formData, {
@@ -1604,7 +1651,7 @@ export default defineComponent({
       return response.data;
     },
   },
-});
+};
 </script>
 
 <style scoped>

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import {
   Bot,
   Braces,
@@ -21,6 +20,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import { conversationApi } from "@/api/v1";
 import ConversationHistoryPreview from "@/components/conversation/ConversationHistoryPreview.vue";
+import { LazyMonacoEditor as VueMonacoEditor } from "@/components/shared/LazyMonacoEditor";
+import UmoSelector from "@/components/shared/UmoSelector.vue";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { useCustomizerStore } from "@/stores/customizer";
 import { copyToClipboard } from "@/utils/clipboard";
@@ -780,31 +781,14 @@ function changePage(nextPage: number) {
         </div>
 
         <div class="filter-block">
-          <label class="filter-label" for="conversation-umo">
+          <div class="filter-label">
             {{ tm("workspace.filters.umo") }}
-          </label>
-          <v-text-field
-            id="conversation-umo"
+          </div>
+          <UmoSelector
             v-model="umoQuery"
-            :placeholder="tm('workspace.filters.umoPlaceholder')"
-            density="compact"
-            variant="solo-filled"
-            flat
-            hide-details
-          >
-            <template #append-inner>
-              <button
-                v-if="umoQuery"
-                type="button"
-                class="filter-input-clear"
-                :aria-label="tm('workspace.filters.reset')"
-                @mousedown.prevent
-                @click.stop="clearUmoQuery"
-              >
-                <X :size="18" aria-hidden="true" />
-              </button>
-            </template>
-          </v-text-field>
+            :label="tm('workspace.filters.umo')"
+            @update:model-value="value => { if (!value) clearUmoQuery() }"
+          />
         </div>
 
         <div class="filter-block filter-block--last">
@@ -1364,7 +1348,7 @@ function changePage(nextPage: number) {
 .workspace-card {
   background: var(--workspace-card);
   border: 0;
-  border-radius: 16px;
+  border-radius: var(--astrbot-radius-card);
   min-width: 0;
   overflow: hidden;
 }
@@ -1419,7 +1403,7 @@ function changePage(nextPage: number) {
 
 .filter-panel :deep(.v-field) {
   background: var(--workspace-surface);
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-control);
   box-shadow: none;
   font-size: 0.8rem;
 }

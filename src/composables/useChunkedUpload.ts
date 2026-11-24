@@ -96,15 +96,18 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
   async function runPool(indexes: number[], sessionId: string, generation: number) {
     const pending = [...indexes];
     const active: Promise<void>[] = [];
-    let failure: any = null;
-    while (!failure && !cancelled && (pending.length > 0 || active.length > 0)) {
+    let failed = false;
+    let failure: unknown;
+    while (!failed && !cancelled && (pending.length > 0 || active.length > 0)) {
       while (pending.length > 0 && active.length < CONCURRENT_UPLOADS) {
         const chunkIndex = pending.shift()!;
         const promise = uploadOneChunk(chunkIndex, sessionId, generation)
           .catch((error) => {
-            // A concurrent success can win Promise.race after another
-            // chunk failed, so record failure before removing its slot.
-            failure = error;
+            // Record failure before releasing the slot, even for a falsy reason.
+            if (!failed) {
+              failed = true;
+              failure = error;
+            }
           })
           .finally(() => {
             const idx = active.indexOf(promise);
@@ -112,19 +115,12 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
           });
         active.push(promise);
       }
-      if (active.length > 0) {
-        try {
-          await Promise.race(active);
-        } catch (err) {
-          // Stop scheduling; already-issued requests are drained
-          // below so a later resume never races them on a chunk.
-          failure = err;
-        }
-      }
+      if (active.length > 0) await Promise.race(active);
     }
+    // Drain issued requests before a later resume can touch the same chunks.
     if (active.length > 0) await Promise.allSettled(active);
     if (cancelled) throw new Error("cancelled");
-    if (failure) throw failure;
+    if (failed) throw failure;
   }
 
   async function initSession() {
@@ -132,8 +128,7 @@ export function useChunkedUpload(api: ChunkedUploadApi) {
     if (!uploadFile) throw new Error("No upload file selected");
     phase.value = "init";
     const data = envelopeData(await api.initUpload({ filename: uploadFile.name, total_size: uploadFile.size }));
-    // Retain the session ID so cancellation can abort an init response
-    // that arrived after cancel() cleared the local file state.
+    // Keep late init IDs available to cancellation cleanup after local reset.
     uploadId = typeof data?.upload_id === "string" ? data.upload_id : "";
     if (cancelled) throw new Error("cancelled");
     if (

@@ -21,7 +21,6 @@ import StyledMenu from "@/components/shared/StyledMenu.vue";
 import { useI18n, useLanguageSwitcher, useModuleI18n } from "@/i18n/composables";
 import type { Locale } from "@/i18n/types";
 import { router } from "@/router";
-import { DARK_THEME_NAME, LIGHT_THEME_NAME } from "@/theme/constants";
 import { getDesktopRuntimeInfo } from "@/utils/desktopRuntime";
 import AboutPage from "@/views/AboutPage.vue";
 
@@ -48,6 +47,7 @@ const LAST_CHAT_ROUTE_KEY = "astrbot:last_chat_route";
 const SHOW_PRE_RELEASES_KEY = "astrbot:updateDialog:showPreReleases";
 let dialog = ref(false);
 let accountWarning = ref(false);
+let accountWarningMd5 = ref(false);
 let accountWarningLegacy = ref(false);
 let accountWarningUpgrade = ref(false);
 let updateStatusDialog = ref(false);
@@ -127,8 +127,14 @@ const desktopUpdateCurrentVersion = ref("-");
 const desktopUpdateLatestVersion = ref("-");
 const desktopUpdateStatus = ref("");
 const desktopDownloadProgress = ref<AstrBotDesktopAppUpdateProgress | null>(null);
+const appHasNewVersion = computed(() =>
+  isDesktopReleaseMode.value ? desktopUpdateHasNewVersion.value : hasNewVersion.value,
+);
+const hasAvailableUpdate = computed(
+  () => appHasNewVersion.value || (!isDesktopReleaseMode.value && dashboardHasNewVersion.value),
+);
 const isChatPath = computed(() => route.path === "/chat" || route.path.startsWith("/chat/"));
-const isDarkTheme = computed(() => theme.global.current.value.dark || customizer.isDarkTheme);
+const isDarkTheme = computed(() => theme.global.current.value.dark || customizer.uiTheme.includes("Dark"));
 const chatHeaderStyle = computed(() => {
   if (!isChatPath.value) return undefined;
   const sidebarWidth = smAndDown.value ? 0 : customizer.chatSidebarCollapsed ? 56 : 245;
@@ -139,7 +145,8 @@ const chatHeaderStyle = computed(() => {
     // window material in the top-left corner.
     left: "0px",
     width: "100%",
-    "--astrbot-chat-sidebar-width": `${sidebarWidth}px`,
+    "--astrbot-chat-sidebar-width": `${sidebarWidth + (!smAndDown.value && customizer.chatNavigationInSidebar ? 56 : 0)}px`,
+    "--astrbot-workbench-preferred-width": chatHeader.workbenchWidth ? `${chatHeader.workbenchWidth}px` : undefined,
   };
 });
 const getAppUpdaterBridge = (): AstrBotAppUpdaterBridge | null => {
@@ -248,10 +255,11 @@ function cancelDesktopUpdate() {
   desktopUpdateDialog.value = false;
 }
 
-async function openDesktopUpdateDialog() {
+async function checkDesktopUpdate(showDialog = false) {
   if (desktopUpdateInstalling.value) return;
+  if (showDialog) desktopUpdateDialog.value = true;
+  if (desktopUpdateChecking.value) return;
   desktopDownloadProgress.value = null;
-  desktopUpdateDialog.value = true;
   desktopUpdateChecking.value = true;
   desktopUpdateInstalling.value = false;
   desktopUpdateHasNewVersion.value = false;
@@ -261,14 +269,24 @@ async function openDesktopUpdateDialog() {
 
   const bridge = getAppUpdaterBridge();
   if (!bridge) {
+    console.warn("[desktop-update] App updater bridge is unavailable.");
     desktopUpdateChecking.value = false;
     desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
     return;
   }
 
+  let checkTimeout: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await bridge.checkForAppUpdate();
+    const result = await Promise.race([
+      bridge.checkForAppUpdate(),
+      new Promise<never>((_, reject) => {
+        checkTimeout = setTimeout(() => {
+          reject(new Error("Desktop app update check timed out."));
+        }, 30_000);
+      }),
+    ]);
     if (!result?.ok) {
+      console.warn("[desktop-update] Failed to check for app updates.", result?.reason || "Unknown error");
       desktopUpdateCurrentVersion.value = result?.currentVersion || "-";
       desktopUpdateLatestVersion.value = result?.latestVersion || result?.currentVersion || "-";
       desktopUpdateStatus.value = result?.reason || t("core.header.updateDialog.desktopApp.checkFailed");
@@ -282,9 +300,10 @@ async function openDesktopUpdateDialog() {
       ? t("core.header.updateDialog.desktopApp.hasNewVersion")
       : t("core.header.updateDialog.desktopApp.isLatest");
   } catch (error) {
-    console.error(error);
+    console.error("[desktop-update] Failed to check for app updates.", error);
     desktopUpdateStatus.value = t("core.header.updateDialog.desktopApp.checkFailed");
   } finally {
+    if (checkTimeout !== undefined) clearTimeout(checkTimeout);
     desktopUpdateChecking.value = false;
   }
 }
@@ -325,7 +344,7 @@ async function confirmDesktopUpdate() {
 
 function handleUpdateClick() {
   if (isDesktopReleaseMode.value) {
-    void openDesktopUpdateDialog();
+    void checkDesktopUpdate(true);
     return;
   }
   checkUpdate();
@@ -395,19 +414,26 @@ function getVersion() {
       dashboardCurrentVersion.value = res.data.data?.dashboard_version || "";
       commonStore.setAstrBotVersion(res.data.data.version || "", res.data.data?.dashboard_version || undefined);
       const change_pwd_hint = res.data.data?.change_pwd_hint;
-      const legacy_pwd_hint = res.data.data?.legacy_pwd_hint;
+      const md5_pwd_hint = res.data.data?.md5_pwd_hint;
+      const legacy_pwd_hint = "legacy_pwd_hint" in res.data.data && Boolean(res.data.data.legacy_pwd_hint);
       const password_upgrade_required = res.data.data?.password_upgrade_required;
-      if (change_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
+      if (change_pwd_hint || md5_pwd_hint || legacy_pwd_hint || password_upgrade_required) {
         dialog.value = true;
         accountWarning.value = true;
         accountWarningUpgrade.value = !!password_upgrade_required;
-        accountWarningLegacy.value = !!legacy_pwd_hint && !password_upgrade_required;
-        if (change_pwd_hint || (legacy_pwd_hint && !password_upgrade_required)) {
+        accountWarningLegacy.value = legacy_pwd_hint;
+        accountWarningMd5.value = !!md5_pwd_hint && !password_upgrade_required;
+        if (change_pwd_hint || ((md5_pwd_hint || legacy_pwd_hint) && !password_upgrade_required)) {
           localStorage.setItem("change_pwd_hint", "true");
         } else {
           localStorage.removeItem("change_pwd_hint");
         }
-        if (legacy_pwd_hint && !password_upgrade_required) {
+        if (md5_pwd_hint && !password_upgrade_required) {
+          localStorage.setItem("md5_pwd_hint", "true");
+        } else {
+          localStorage.removeItem("md5_pwd_hint");
+        }
+        if (legacy_pwd_hint) {
           localStorage.setItem("legacy_pwd_hint", "true");
         } else {
           localStorage.removeItem("legacy_pwd_hint");
@@ -418,10 +444,12 @@ function getVersion() {
           localStorage.removeItem("password_upgrade_required");
         }
       } else {
+        accountWarningMd5.value = false;
         accountWarningLegacy.value = false;
         accountWarningUpgrade.value = false;
-        localStorage.removeItem("change_pwd_hint");
         localStorage.removeItem("legacy_pwd_hint");
+        localStorage.removeItem("change_pwd_hint");
+        localStorage.removeItem("md5_pwd_hint");
         localStorage.removeItem("password_upgrade_required");
       }
     })
@@ -432,13 +460,15 @@ function getVersion() {
 
 function initPasswordWarningFromStorage() {
   const hasChangePwdHint = localStorage.getItem("change_pwd_hint") === "true";
+  const hasMd5PwdHint = localStorage.getItem("md5_pwd_hint") === "true";
   const hasLegacyPwdHint = localStorage.getItem("legacy_pwd_hint") === "true";
   const hasPasswordUpgradeRequired = localStorage.getItem("password_upgrade_required") === "true";
-  if (hasChangePwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
+  if (hasChangePwdHint || hasMd5PwdHint || hasLegacyPwdHint || hasPasswordUpgradeRequired) {
     dialog.value = true;
     accountWarning.value = true;
     accountWarningUpgrade.value = hasPasswordUpgradeRequired;
-    accountWarningLegacy.value = hasLegacyPwdHint && !hasPasswordUpgradeRequired;
+    accountWarningLegacy.value = hasLegacyPwdHint;
+    accountWarningMd5.value = hasMd5PwdHint && !hasPasswordUpgradeRequired;
   }
 }
 
@@ -795,15 +825,8 @@ const themeOptions = [
   { mode: "system" as const, icon: "mdi-sync", labelKey: "core.header.buttons.theme.system" },
 ] as const;
 
-const themeMode = computed(() => (customizer.autoSwitchTheme ? "system" : customizer.isDarkTheme ? "dark" : "light"));
-
 function setThemeMode(mode: "light" | "dark" | "system") {
-  customizer.SET_AUTO_SYNC(mode === "system");
-  if (mode === "system") {
-    customizer.APPLY_SYSTEM_THEME();
-  } else {
-    customizer.SET_UI_THEME(mode === "dark" ? DARK_THEME_NAME : LIGHT_THEME_NAME);
-  }
+  customizer.SET_THEME_MODE(mode);
 }
 
 function openReleaseNotesDialog(body: string, tag: string) {
@@ -816,7 +839,6 @@ getVersion();
 checkUpdate();
 initPasswordWarningFromStorage();
 
-commonStore.createEventSource(); // log
 commonStore.getStartTime();
 
 onUnmounted(() => {
@@ -943,6 +965,7 @@ onMounted(async () => {
   isDesktopReleaseMode.value = runtimeInfo.isDesktopRuntime;
   if (isDesktopReleaseMode.value) {
     dashboardHasNewVersion.value = false;
+    void checkDesktopUpdate();
   }
 
   // The toolbar band doubles as the window drag region on desktop (no native title bar).
@@ -955,7 +978,7 @@ onMounted(async () => {
 <template>
   <v-app-bar
     elevation="0"
-    height="40"
+    height="42"
     data-tauri-drag-region
     class="top-header"
     :class="{
@@ -969,6 +992,7 @@ onMounted(async () => {
     <v-btn
       v-if="$vuetify.display.smAndDown"
       class="header-menu-btn"
+      :class="{ 'header-menu-btn--browser': !isDesktopReleaseMode }"
       icon
       rounded="lg"
       variant="text"
@@ -981,21 +1005,22 @@ onMounted(async () => {
 
     <!-- Pages register their contextual toolbar content through the
          headerContext store (e.g. the chat page's model selector and title). -->
-    <div class="app-header-context">
-      <component :is="headerContext.component" v-if="headerContext.component" />
-    </div>
+    <div class="app-header-context"> <component :is="headerContext.component" v-if="headerContext.component" /> </div>
 
     <v-spacer />
 
-    <!-- 版本提示信息 - 在手机上隐藏 -->
-    <div v-if="!isChatPath" class="mr-4 hidden-xs">
-      <small v-if="hasNewVersion">
-        {{ t("core.header.version.hasNewVersion") }}
-      </small>
+    <!-- Desktop keeps the update notice visible in both Bot and Chat modes. -->
+    <button
+      v-if="hasAvailableUpdate && (!isChatPath || isDesktopReleaseMode)"
+      type="button"
+      class="update-notice mr-4 hidden-xs text-no-wrap"
+      @click="handleUpdateClick"
+    >
+      <small v-if="appHasNewVersion"> {{ t("core.header.version.hasNewVersion") }} </small>
       <small v-else-if="dashboardHasNewVersion && !isDesktopReleaseMode">
         {{ t("core.header.version.dashboardHasNewVersion") }}
       </small>
-    </div>
+    </button>
 
     <div class="header-actions" :class="{ 'chat-header-actions': isChatPath }">
       <v-btn
@@ -1012,17 +1037,15 @@ onMounted(async () => {
         @click="chatHeader.TOGGLE_WORKSPACE_FILES"
       >
         <v-icon size="20">
-          {{
-            chatHeader.workspaceFilesOpen
+          {{ chatHeader.workspaceFilesOpen
               ? "mdi-folder-open-outline"
-              : "mdi-folder-outline"
-          }}
+              : "mdi-folder-outline" }}
         </v-icon>
       </v-btn>
 
       <!-- Bot/Chat mode switch - single button, hidden in chat mobile menu -->
       <v-btn
-        v-if="!isChatPath || !$vuetify.display.smAndDown"
+        v-if="!customizer.chatNavigationInSidebar && (!isChatPath || !$vuetify.display.smAndDown)"
         class="mode-switch-btn"
         :class="{ 'mr-4 hidden-xs': !isChatPath }"
         variant="text"
@@ -1032,9 +1055,9 @@ onMounted(async () => {
         @click="switchMode"
       >
         <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
-        <span class="mode-switch-label">{{
-          nextMode === "bot" ? t("core.navigation.botMode") : t("core.navigation.chat")
-        }}</span>
+        <span class="mode-switch-label"
+          >{{ nextMode === "bot" ? t("core.navigation.botMode") : t("core.navigation.chat") }}</span
+        >
       </v-btn>
 
       <!-- 功能菜单 -->
@@ -1053,7 +1076,9 @@ onMounted(async () => {
             icon
             :ripple="false"
           >
-            <v-icon>mdi-dots-vertical</v-icon>
+            <v-badge :model-value="hasAvailableUpdate" color="primary" dot floating>
+              <v-icon>mdi-dots-vertical</v-icon>
+            </v-badge>
             <span class="header-toolbar-label">{{ t("core.navigation.options") }}</span>
           </v-btn>
         </template>
@@ -1061,25 +1086,18 @@ onMounted(async () => {
         <!-- Bot/Chat 模式切换 - 仅在手机端显示 -->
         <template
           v-if="
-            (isChatPath && $vuetify.display.smAndDown) ||
-            (!isChatPath && $vuetify.display.xs)
+            !customizer.chatNavigationInSidebar && (
+              (isChatPath && $vuetify.display.smAndDown) ||
+              (!isChatPath && $vuetify.display.xs)
+            )
           "
         >
           <div class="mobile-mode-switch-wrapper">
-            <v-btn
-              class="mobile-mode-switch-btn"
-              variant="text"
-              block
-              @click="switchMode"
-            >
-              <v-icon start>{{
-                nextMode === "bot" ? "mdi-robot" : "mdi-chat"
-              }}</v-icon>
-              {{
-                nextMode === "bot"
+            <v-btn class="mobile-mode-switch-btn" variant="text" block @click="switchMode">
+              <v-icon start>{{ nextMode === "bot" ? "mdi-robot" : "mdi-chat" }}</v-icon>
+              {{ nextMode === "bot"
                   ? t("core.navigation.botMode")
-                  : t("core.navigation.chat")
-              }}
+                  : t("core.navigation.chat") }}
             </v-btn>
           </div>
           <v-divider class="my-1" />
@@ -1101,29 +1119,16 @@ onMounted(async () => {
               class="styled-menu-item language-group-trigger"
               rounded="md"
             >
-              <template v-slot:prepend>
-                <v-icon>mdi-translate</v-icon>
-              </template>
-              <v-list-item-title>{{
-                t("core.common.language")
-              }}</v-list-item-title>
+              <template v-slot:prepend> <v-icon>mdi-translate</v-icon> </template>
+              <v-list-item-title>{{ t("core.common.language") }}</v-list-item-title>
               <template v-slot:append>
-                <span class="language-group-current">{{
-                  currentLanguage?.flag
-                }}</span>
-                <v-icon size="18" class="language-group-arrow"
-                  >mdi-chevron-right</v-icon
-                >
+                <span class="language-group-current">{{ currentLanguage?.flag }}</span>
+                <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
               </template>
             </v-list-item>
           </template>
 
-          <v-card
-            class="styled-menu-card"
-            style="min-width: 180px"
-            elevation="8"
-            rounded="lg"
-          >
+          <v-card class="styled-menu-card" style="min-width: 180px" elevation="8" rounded="lg">
             <v-list density="compact" class="styled-menu-list pa-1">
               <v-list-item
                 v-for="lang in languages"
@@ -1136,125 +1141,90 @@ onMounted(async () => {
                 class="styled-menu-item"
                 rounded="md"
               >
-                <template v-slot:prepend>
-                  <span class="language-flag">{{ lang.flag }}</span>
-                </template>
+                <template v-slot:prepend> <span class="language-flag">{{ lang.flag }}</span> </template>
                 <v-list-item-title>{{ lang.name }}</v-list-item-title>
               </v-list-item>
             </v-list>
           </v-card>
         </v-menu>
 
-      <!-- 主题切换分组 -->
-      <v-menu
-        open-on-click
-        :open-on-hover="!$vuetify.display.xs"
-        :open-delay="!$vuetify.display.xs ? 60 : 0"
-        :close-delay="!$vuetify.display.xs ? 120 : 0"
-        :location="$vuetify.display.xs ? 'bottom' : 'start center'"
-        offset="8"
-      >
-        <template v-slot:activator="{ props: themeMenuProps }">
-          <v-list-item
-            v-bind="themeMenuProps"
-            @click.stop
-            class="styled-menu-item theme-group-trigger"
-            rounded="md"
-          >
-            <template v-slot:prepend>
-              <v-icon>mdi-brightness-6</v-icon>
-            </template>
-            <v-list-item-title>{{
-              t("core.header.buttons.theme.title")
-            }}</v-list-item-title>
-            <template v-slot:append>
-              <span class="theme-group-current">
-                <v-icon size="16">{{
-                  themeMode === 'dark'
+        <!-- 主题切换分组 -->
+        <v-menu
+          open-on-click
+          :open-on-hover="!$vuetify.display.xs"
+          :open-delay="!$vuetify.display.xs ? 60 : 0"
+          :close-delay="!$vuetify.display.xs ? 120 : 0"
+          :location="$vuetify.display.xs ? 'bottom' : 'start center'"
+          offset="8"
+        >
+          <template v-slot:activator="{ props: themeMenuProps }">
+            <v-list-item v-bind="themeMenuProps" @click.stop class="styled-menu-item theme-group-trigger" rounded="md">
+              <template v-slot:prepend> <v-icon>mdi-brightness-6</v-icon> </template>
+              <v-list-item-title>{{ t("core.header.buttons.theme.title") }}</v-list-item-title>
+              <template v-slot:append>
+                <span class="theme-group-current">
+                  <v-icon size="16"
+                    >{{ customizer.themeMode === 'dark'
                     ? 'mdi-weather-night'
-                    : themeMode === 'system'
+                    : customizer.themeMode === 'system'
                       ? 'mdi-theme-light-dark'
-                      : 'mdi-white-balance-sunny'
-                }}</v-icon>
-              </span>
-              <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
-            </template>
-          </v-list-item>
-        </template>
-
-        <v-card
-          class="styled-menu-card"
-          style="min-width: 170px"
-          elevation="8"
-          rounded="lg"
-        >
-          <v-list density="compact" class="styled-menu-list pa-1">
-            <v-list-item
-              v-for="option in themeOptions"
-              :key="option.mode"
-              @click="setThemeMode(option.mode)"
-              :class="{
-                'styled-menu-item-active': themeMode === option.mode,
-              }"
-              class="styled-menu-item"
-              rounded="md"
-            >
-              <template v-slot:prepend>
-                <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+                      : 'mdi-white-balance-sunny' }}</v-icon
+                  >
+                </span>
+                <v-icon size="18" class="language-group-arrow">mdi-chevron-right</v-icon>
               </template>
-              <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
             </v-list-item>
-          </v-list>
-        </v-card>
-      </v-menu>
+          </template>
 
-      <!-- 更新按钮 -->
-      <v-list-item
-        @click="handleUpdateClick"
-        class="styled-menu-item"
-        rounded="md"
-      >
-        <template v-slot:prepend>
-          <v-icon>mdi-arrow-up-circle</v-icon>
-        </template>
-        <v-list-item-title>{{
-          t("core.header.updateDialog.title")
-        }}</v-list-item-title>
-        <template
-          v-slot:append
-          v-if="
-            hasNewVersion || (dashboardHasNewVersion && !isDesktopReleaseMode)
-          "
+          <v-card class="styled-menu-card" style="min-width: 170px" elevation="8" rounded="lg">
+            <v-list density="compact" class="styled-menu-list pa-1">
+              <v-list-item
+                v-for="option in themeOptions"
+                :key="option.mode"
+                @click="setThemeMode(option.mode)"
+                :class="{
+                'styled-menu-item-active': customizer.themeMode === option.mode,
+              }"
+                class="styled-menu-item"
+                rounded="md"
+              >
+                <template v-slot:prepend>
+                  <v-icon size="18" class="theme-option-icon">{{ option.icon }}</v-icon>
+                </template>
+                <v-list-item-title>{{ t(option.labelKey) }}</v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card>
+        </v-menu>
+
+        <!-- 更新按钮 -->
+        <v-list-item @click="handleUpdateClick" class="styled-menu-item" rounded="md">
+          <template v-slot:prepend> <v-icon>mdi-arrow-up-circle</v-icon> </template>
+          <v-list-item-title>{{ t("core.header.updateDialog.title") }}</v-list-item-title>
+          <template v-slot:append v-if="hasAvailableUpdate">
+            <v-chip size="x-small" color="primary" variant="tonal" class="ml-2">!</v-chip>
+          </template>
+        </v-list-item>
+
+        <!-- 账户按钮 -->
+        <v-list-item @click="dialog = true" class="styled-menu-item" rounded="md">
+          <template v-slot:prepend> <v-icon>mdi-account</v-icon> </template>
+          <v-list-item-title>{{ t("core.header.accountDialog.title") }}</v-list-item-title>
+        </v-list-item>
+
+        <v-divider class="my-1" />
+
+        <v-list-item
+          @click="authStore.logout()"
+          class="styled-menu-item text-error"
+          prepend-icon="mdi-logout"
+          rounded="md"
         >
-          <v-chip size="x-small" color="primary" variant="tonal" class="ml-2"
-            >!</v-chip
-          >
-        </template>
-      </v-list-item>
-
-      <!-- 账户按钮 -->
-      <v-list-item @click="dialog = true" class="styled-menu-item" rounded="md">
-        <template v-slot:prepend>
-          <v-icon>mdi-account</v-icon>
-        </template>
-        <v-list-item-title>{{
-          t("core.header.accountDialog.title")
-        }}</v-list-item-title>
-      </v-list-item>
-
-      <v-divider class="my-1" />
-
-      <v-list-item
-        @click="authStore.logout()"
-        class="styled-menu-item text-error"
-        prepend-icon="mdi-logout"
-        rounded="md"
-      >
-        <v-list-item-title>
-          {{ t("core.header.buttons.logout") }}
-        </v-list-item-title>
-      </v-list-item>
+          <v-list-item-title> {{ t("core.header.buttons.logout") }} </v-list-item-title>
+        </v-list-item>
       </StyledMenu>
+      <!-- Keep the Teleport destination mounted while ChatUI leaves or re-enters. -->
+      <div v-show="isChatPath" id="chat-workbench-header" />
       <!-- Custom caption buttons on Windows, where the native title bar is disabled. -->
       <div v-if="isWindowsDesktop" class="header-caption-btns">
         <v-btn
@@ -1295,15 +1265,8 @@ onMounted(async () => {
     >
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6 mobile-card-title">
-          <span>{{
-            t("core.header.updateDialog.title")
-          }}</span>
-          <v-btn
-            v-if="$vuetify.display.xs"
-            icon
-            variant="text"
-            @click="updateStatusDialog = false"
-          >
+          <span>{{ t("core.header.updateDialog.title") }}</span>
+          <v-btn v-if="$vuetify.display.xs" icon variant="text" @click="updateStatusDialog = false">
             <v-icon>mdi-close</v-icon>
           </v-btn>
         </v-card-title>
@@ -1316,16 +1279,10 @@ onMounted(async () => {
                 </div>
                 <div class="text-h2 font-weight-bold">{{ botCurrVersion }}</div>
               </div>
-              <v-chip
-                :color="hasNewVersion ? 'primary' : 'success'"
-                variant="tonal"
-                size="small"
-              >
-                {{
-                  hasNewVersion
+              <v-chip :color="hasNewVersion ? 'primary' : 'success'" variant="tonal" size="small">
+                {{ hasNewVersion
                     ? t("core.header.version.hasNewVersion")
-                    : updateStatus
-                }}
+                    : updateStatus }}
               </v-chip>
             </div>
 
@@ -1334,43 +1291,24 @@ onMounted(async () => {
               class="update-progress-panel mt-5"
               :class="{ 'update-progress-panel--success': restartCompleted }"
             >
-              <div
-                v-if="restartCompleted"
-                class="update-feedback-panel update-feedback-panel--success"
-              >
-                <v-icon
-                  icon="mdi-check-circle"
-                  color="success"
-                  size="46"
-                ></v-icon>
+              <div v-if="restartCompleted" class="update-feedback-panel update-feedback-panel--success">
+                <v-icon icon="mdi-check-circle" color="success" size="46"></v-icon>
                 <div class="text-subtitle-1 font-weight-medium">
                   {{ t("core.header.updateDialog.progress.successReady") }}
                 </div>
                 <div class="text-caption text-medium-emphasis">
-                  {{
-                    t("core.header.updateDialog.progress.autoReloadIn", {
+                  {{ t("core.header.updateDialog.progress.autoReloadIn", {
                       seconds: restartReloadCountdown,
-                    })
-                  }}
+                    }) }}
                 </div>
-                <v-btn
-                  color="success"
-                  variant="tonal"
-                  size="small"
-                  @click="reloadAfterUpdate"
-                >
+                <v-btn color="success" variant="tonal" size="small" @click="reloadAfterUpdate">
                   <v-icon class="mr-1" size="18">mdi-refresh</v-icon>
                   {{ t("core.header.updateDialog.progress.reloadNow") }}
                 </v-btn>
               </div>
 
               <div v-else-if="restartWaiting" class="update-feedback-panel">
-                <v-progress-circular
-                  indeterminate
-                  color="primary"
-                  size="42"
-                  width="4"
-                ></v-progress-circular>
+                <v-progress-circular indeterminate color="primary" size="42" width="4"></v-progress-circular>
                 <div class="text-subtitle-1 font-weight-medium">
                   {{ t("core.header.updateDialog.progress.restarting") }}
                 </div>
@@ -1379,17 +1317,13 @@ onMounted(async () => {
               <template v-else>
                 <div class="d-flex align-center justify-space-between mb-2">
                   <div>
-                    <div class="text-subtitle-1 font-weight-medium">
-                      {{ updateProgressMessage }}
-                    </div>
+                    <div class="text-subtitle-1 font-weight-medium"> {{ updateProgressMessage }} </div>
                     <div class="text-caption text-medium-emphasis">
                       {{ t("core.header.updateDialog.progress.target") }}
                       {{ updateProgress.version || "latest" }}
                     </div>
                   </div>
-                  <div class="text-h6 font-weight-bold">
-                    {{ updateProgress.overall_percent }}%
-                  </div>
+                  <div class="text-h6 font-weight-bold"> {{ updateProgress.overall_percent }}% </div>
                 </div>
                 <v-progress-linear
                   :model-value="updateProgress.overall_percent"
@@ -1399,11 +1333,7 @@ onMounted(async () => {
                 ></v-progress-linear>
 
                 <div class="update-stage-list mt-4">
-                  <div
-                    v-for="stage in updateStageItems"
-                    :key="stage.key"
-                    class="update-stage-row"
-                  >
+                  <div v-for="stage in updateStageItems" :key="stage.key" class="update-stage-row">
                     <v-icon
                       :icon="getStageStatusIcon(stage.progress.status)"
                       :color="getStageStatusColor(stage.progress.status)"
@@ -1411,12 +1341,8 @@ onMounted(async () => {
                     ></v-icon>
                     <div class="update-stage-content">
                       <div class="d-flex align-center justify-space-between">
-                        <span class="font-weight-medium">{{
-                          stage.title
-                        }}</span>
-                        <span class="text-caption">
-                          {{ stage.progress.percent }}%
-                        </span>
+                        <span class="font-weight-medium">{{ stage.title }}</span>
+                        <span class="text-caption"> {{ stage.progress.percent }}% </span>
                       </div>
                       <v-progress-linear
                         :model-value="stage.progress.percent"
@@ -1427,12 +1353,11 @@ onMounted(async () => {
                       ></v-progress-linear>
                       <div class="update-stage-meta">
                         <span>
-                          {{ formatDownloadSize(stage.progress.downloaded) }} /
+                          {{ formatDownloadSize(stage.progress.downloaded) }}
+                          /
                           {{ formatDownloadSize(stage.progress.total) }}
                         </span>
-                        <span>{{
-                          formatDownloadSpeed(stage.progress.speed)
-                        }}</span>
+                        <span>{{ formatDownloadSpeed(stage.progress.speed) }}</span>
                       </div>
                     </div>
                   </div>
@@ -1461,6 +1386,7 @@ onMounted(async () => {
               <div class="release-message-preview">
                 <MarkdownRender
                   :content="releaseMessage"
+                  :is-dark="isDarkTheme"
                   :typewriter="false"
                   class="markdown-content"
                 />
@@ -1470,9 +1396,7 @@ onMounted(async () => {
             <!-- 发行版 -->
             <div class="mt-5">
               <div class="release-table-toolbar mb-3">
-                <div class="text-subtitle-1 font-weight-medium">
-                  {{ t("core.header.updateDialog.releases") }}
-                </div>
+                <div class="text-subtitle-1 font-weight-medium"> {{ t("core.header.updateDialog.releases") }} </div>
                 <v-switch
                   v-model="showPreReleases"
                   class="release-prerelease-switch"
@@ -1492,25 +1416,13 @@ onMounted(async () => {
                 density="compact"
                 class="mb-4"
               >
-                <template v-slot:prepend>
-                  <v-icon>mdi-alert-circle-outline</v-icon>
-                </template>
+                <template v-slot:prepend> <v-icon>mdi-alert-circle-outline</v-icon> </template>
                 <div class="text-body-2">
-                  <strong>{{
-                    t("core.header.updateDialog.preReleaseWarning.title")
-                  }}</strong>
-                  <br />
-                  {{
-                    t("core.header.updateDialog.preReleaseWarning.description")
-                  }}
-                  <a
-                    href="https://github.com/AstrBotDevs/AstrBot/issues"
-                    target="_blank"
-                    class="text-decoration-none"
-                  >
-                    {{
-                      t("core.header.updateDialog.preReleaseWarning.issueLink")
-                    }}
+                  <strong>{{ t("core.header.updateDialog.preReleaseWarning.title") }}</strong>
+                  <br>
+                  {{ t("core.header.updateDialog.preReleaseWarning.description") }}
+                  <a href="https://github.com/AstrBotDevs/AstrBot/issues" target="_blank" class="text-decoration-none">
+                    {{ t("core.header.updateDialog.preReleaseWarning.issueLink") }}
                   </a>
                 </div>
               </v-alert>
@@ -1553,9 +1465,7 @@ onMounted(async () => {
                     >{{ t("core.header.updateDialog.table.view") }}</v-btn
                   >
                 </template>
-                <template
-                  v-slot:item.switch="{ item }: { item: { tag_name: string } }"
-                >
+                <template v-slot:item.switch="{ item }: { item: { tag_name: string } }">
                   <v-btn
                     @click="switchVersion(item.tag_name)"
                     variant="tonal"
@@ -1577,9 +1487,7 @@ onMounted(async () => {
                   showAdvancedUpdateSettings = !showAdvancedUpdateSettings
                 "
               >
-                <span>{{
-                  t("core.header.updateDialog.advancedSettings")
-                }}</span>
+                <span>{{ t("core.header.updateDialog.advancedSettings") }}</span>
                 <v-icon
                   :icon="
                     showAdvancedUpdateSettings
@@ -1590,43 +1498,27 @@ onMounted(async () => {
                 ></v-icon>
               </button>
 
-              <div
-                v-if="showAdvancedUpdateSettings"
-                class="dashboard-update-banner mt-3"
-              >
+              <div v-if="showAdvancedUpdateSettings" class="dashboard-update-banner mt-3">
                 <div>
-                  <div class="font-weight-medium">
-                    {{ t("core.header.updateDialog.dashboardUpdate.title") }}
-                  </div>
+                  <div class="font-weight-medium"> {{ t("core.header.updateDialog.dashboardUpdate.title") }} </div>
                   <div class="text-caption text-medium-emphasis">
-                    {{
-                      t(
+                    {{ t(
                         "core.header.updateDialog.dashboardUpdate.currentVersion",
-                      )
-                    }}
+                      ) }}
                     {{ dashboardCurrentVersion }}
                   </div>
                   <div class="text-caption text-medium-emphasis">
-                    {{
-                      dashboardHasNewVersion
+                    {{ dashboardHasNewVersion
                         ? t(
                             "core.header.updateDialog.dashboardUpdate.hasNewVersion",
                           )
-                        : t("core.header.updateDialog.dashboardUpdate.fallback")
-                    }}
+                        : t("core.header.updateDialog.dashboardUpdate.fallback") }}
                   </div>
                 </div>
-                <v-btn
-                  color="primary"
-                  variant="tonal"
-                  @click="updateDashboard()"
-                  :loading="updatingDashboardLoading"
-                >
-                  {{
-                    t(
+                <v-btn color="primary" variant="tonal" @click="updateDashboard()" :loading="updatingDashboardLoading">
+                  {{ t(
                       "core.header.updateDialog.dashboardUpdate.downloadAndUpdate",
-                    )
-                  }}
+                    ) }}
                 </v-btn>
               </div>
             </div>
@@ -1634,11 +1526,7 @@ onMounted(async () => {
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn
-            color="blue-darken-1"
-            variant="text"
-            @click="updateStatusDialog = false"
-          >
+          <v-btn color="blue-darken-1" variant="text" @click="updateStatusDialog = false">
             {{ t("core.common.close") }}
           </v-btn>
         </v-card-actions>
@@ -1652,41 +1540,30 @@ onMounted(async () => {
           {{ t("core.header.updateDialog.releaseNotes.title") }}:
           {{ selectedReleaseTag }}
         </v-card-title>
-        <v-card-text
-          style="font-size: 14px; max-height: 400px; overflow-y: auto"
-        >
+        <v-card-text style="font-size: 14px; max-height: 400px; overflow-y: auto">
           <MarkdownRender
             :content="selectedReleaseNotes"
+            :is-dark="isDarkTheme"
             :typewriter="false"
             class="markdown-content"
           />
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn
-            color="blue-darken-1"
-            variant="text"
-            @click="releaseNotesDialog = false"
-          >
+          <v-btn color="blue-darken-1" variant="text" @click="releaseNotesDialog = false">
             {{ t("core.common.close") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-dialog
-      v-model="desktopUpdateDialog"
-      :persistent="desktopUpdateInstalling"
-      max-width="460"
-    >
+    <v-dialog v-model="desktopUpdateDialog" :persistent="desktopUpdateInstalling" max-width="460">
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6">
           {{ t("core.header.updateDialog.desktopApp.title") }}
         </v-card-title>
         <v-card-text>
-          <div class="mb-3">
-            {{ t("core.header.updateDialog.desktopApp.message") }}
-          </div>
+          <div class="mb-3"> {{ t("core.header.updateDialog.desktopApp.message") }} </div>
           <v-alert type="info" variant="tonal" density="compact">
             <div>
               {{ t("core.header.updateDialog.desktopApp.currentVersion") }}
@@ -1694,34 +1571,16 @@ onMounted(async () => {
             </div>
             <div>
               {{ t("core.header.updateDialog.desktopApp.latestVersion") }}
-              <strong v-if="!desktopUpdateChecking">{{
-                desktopUpdateLatestVersion
-              }}</strong>
-              <v-progress-circular
-                v-else
-                indeterminate
-                size="16"
-                width="2"
-                class="ml-1"
-              />
+              <strong v-if="!desktopUpdateChecking">{{ desktopUpdateLatestVersion }}</strong>
+              <v-progress-circular v-else indeterminate size="16" width="2" class="ml-1" />
             </div>
           </v-alert>
-          <DesktopUpdateProgress
-            v-if="desktopUpdateInstalling"
-            :progress="desktopDownloadProgress"
-          />
-          <div v-else class="text-caption mt-3" role="status">
-            {{ desktopUpdateStatus }}
-          </div>
+          <DesktopUpdateProgress v-if="desktopUpdateInstalling" :progress="desktopDownloadProgress" />
+          <div v-else class="text-caption mt-3" role="status"> {{ desktopUpdateStatus }} </div>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn
-            color="grey"
-            variant="text"
-            @click="cancelDesktopUpdate"
-            :disabled="desktopUpdateInstalling"
-          >
+          <v-btn color="grey" variant="text" @click="cancelDesktopUpdate" :disabled="desktopUpdateInstalling">
             {{ t("core.common.dialog.cancelButton") }}
           </v-btn>
           <v-btn
@@ -1742,54 +1601,29 @@ onMounted(async () => {
     </v-dialog>
 
     <!-- 账户对话框 -->
-    <v-dialog
-      v-model="dialog"
-      persistent
-      :max-width="$vuetify.display.xs ? '90%' : '500'"
-    >
+    <v-dialog v-model="dialog" persistent :max-width="$vuetify.display.xs ? '90%' : '500'">
       <v-card class="account-dialog">
         <v-card-text class="py-6">
           <div class="d-flex flex-column align-start mb-6">
-            <logo
-              :title="t('core.header.logoTitle')"
-              :subtitle="t('core.header.accountDialog.title')"
-            ></logo>
+            <logo :title="t('core.header.logoTitle')" :subtitle="t('core.header.accountDialog.title')"></logo>
           </div>
-          <v-alert
-            v-if="accountWarning"
-            type="warning"
-            variant="tonal"
-            border="start"
-            class="mb-4"
-          >
-            <strong>{{
-              t(
-                accountWarningUpgrade
+          <v-alert v-if="accountWarning" type="warning" variant="tonal" border="start" class="mb-4">
+            <strong
+              >{{ t(
+                accountWarningUpgrade || accountWarningLegacy
                   ? "core.header.accountDialog.securityWarningUpgrade"
-                  : accountWarningLegacy
-                  ? "core.header.accountDialog.securityWarningLegacy"
+                  : accountWarningMd5
+                  ? "core.header.accountDialog.securityWarningMd5"
                   : "core.header.accountDialog.securityWarning",
-              )
-            }}</strong>
+              ) }}</strong
+            >
           </v-alert>
 
-          <v-alert
-            v-if="accountEditStatus.success"
-            type="success"
-            variant="tonal"
-            border="start"
-            class="mb-4"
-          >
+          <v-alert v-if="accountEditStatus.success" type="success" variant="tonal" border="start" class="mb-4">
             {{ accountEditStatus.message }}
           </v-alert>
 
-          <v-alert
-            v-if="accountEditStatus.error"
-            type="error"
-            variant="tonal"
-            border="start"
-            class="mb-4"
-          >
+          <v-alert v-if="accountEditStatus.error" type="error" variant="tonal" border="start" class="mb-4">
             {{ accountEditStatus.message }}
           </v-alert>
 
@@ -1896,9 +1730,7 @@ onMounted(async () => {
     <!-- About 对话框 - 仅在 chat mode 下使用 -->
     <v-dialog v-model="aboutDialog" width="600">
       <v-card>
-        <v-card-text style="overflow-y: auto">
-          <AboutPage />
-        </v-card-text>
+        <v-card-text style="overflow-y: auto"> <AboutPage /> </v-card-text>
       </v-card>
     </v-dialog>
   </v-app-bar>
@@ -2105,7 +1937,7 @@ onMounted(async () => {
   margin-right: 8px;
 }
 
-.language-group-trigger :deep(.v-list-item__append) {
+.language-group-trigger .v-list-item__append {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2124,7 +1956,7 @@ onMounted(async () => {
   min-width: 180px;
 }
 
-.theme-group-trigger :deep(.v-list-item__append) {
+.theme-group-trigger .v-list-item__append {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2199,11 +2031,7 @@ onMounted(async () => {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(var(--v-theme-success), 0.16),
-    rgba(var(--v-theme-success), 0.07)
-  );
+  background: linear-gradient(135deg, rgba(var(--v-theme-success), 0.16), rgba(var(--v-theme-success), 0.07));
   opacity: 0;
   pointer-events: none;
   transition: opacity 1.1s ease;
@@ -2227,11 +2055,7 @@ onMounted(async () => {
   bottom: 0;
   left: 0;
   height: 56px;
-  background: linear-gradient(
-    to bottom,
-    rgba(var(--v-theme-surface), 0),
-    rgb(var(--v-theme-surface))
-  );
+  background: linear-gradient(to bottom, rgba(var(--v-theme-surface), 0), rgb(var(--v-theme-surface)));
   pointer-events: none;
 }
 
@@ -2397,6 +2221,14 @@ onMounted(async () => {
   user-select: none;
 }
 
+.top-header .update-notice {
+  cursor: pointer;
+}
+
+.top-header .update-notice:hover {
+  text-decoration: underline;
+}
+
 /* Mount point for page-contextual toolbar content (see the template note). */
 .app-header-context {
   display: flex;
@@ -2416,19 +2248,20 @@ onMounted(async () => {
 
 html {
   /* Keep in sync with the app bar height above. */
-  --astrbot-toolbar-height: 40px;
+  --astrbot-toolbar-height: 42px;
 }
 
 .top-header,
 .top-header.chat-mode-header,
 .top-header.chat-mode-header.chat-mode-header--dark {
+  background: var(--astrbot-chrome-bg, #f2f2f7) !important;
   border-bottom: 0 !important;
   box-shadow: none !important;
 }
 
-html[data-astrbot-desktop-platform='macos'] .top-header,
-html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header,
-html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mode-header--dark {
+html[data-astrbot-desktop-platform="macos"] .top-header,
+html[data-astrbot-desktop-platform="macos"] .top-header.chat-mode-header,
+html[data-astrbot-desktop-platform="macos"] .top-header.chat-mode-header.chat-mode-header--dark {
   background: var(--astrbot-vibrancy-tint, transparent) !important;
 }
 
@@ -2446,7 +2279,6 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   width: 100% !important;
 }
 
-
 .top-header .v-toolbar__content {
   padding-inline-end: 24px !important;
 }
@@ -2454,7 +2286,7 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 /* On macOS the traffic lights sit over the toolbar's left zone once the sidebar
    is no longer permanent, so the menu button must clear them. */
 @media (max-width: 959.98px) {
-  html[data-astrbot-desktop-platform='macos'] .top-header .v-toolbar__content {
+  html[data-astrbot-desktop-platform="macos"] .top-header .v-toolbar__content {
     padding-inline-start: 74px !important;
   }
 }
@@ -2468,6 +2300,11 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
 
 .top-header .header-menu-btn:hover {
   color: rgba(var(--v-theme-on-surface), 0.9);
+}
+
+.top-header .v-toolbar__content > .header-menu-btn--browser:first-child {
+  margin-inline-start: -12px;
+  margin-inline-end: 12px;
 }
 
 .header-toolbar-label {
@@ -2570,5 +2407,38 @@ html[data-astrbot-desktop-platform='macos'] .top-header.chat-mode-header.chat-mo
   background: rgba(232, 17, 35, 0.9) !important;
   color: #fff;
 }
+</style>
 
+<style>
+#chat-workbench-header:empty {
+  display: none;
+}
+#chat-workbench-header {
+  min-width: 0;
+  flex-shrink: 0;
+}
+#chat-workbench-header:has(.workbench-launcher) {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  height: var(--astrbot-toolbar-height);
+}
+#chat-workbench-header:has(.workbench-header) {
+  width: calc(var(--astrbot-workbench-width) - var(--workbench-caption-width, 0px));
+  border-left: 1px solid rgba(var(--v-theme-on-surface), 0.1);
+}
+.top-header:has(#chat-workbench-header .workbench-header) {
+  --astrbot-active-workbench-width: var(--astrbot-workbench-width);
+}
+.top-header:has(#chat-workbench-header:not(:empty)) .header-actions {
+  margin-right: -18px;
+}
+.top-header:has(.header-caption-btns) {
+  --workbench-caption-width: 132px;
+}
+@media (min-width: 960px) and (max-width: 1400px) {
+  .top-header:has(#chat-workbench-header .workbench-header) .chat-toolbar-context-title {
+    display: none;
+  }
+}
 </style>

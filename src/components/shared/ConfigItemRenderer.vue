@@ -1,82 +1,78 @@
 <template>
-  <div
-    class="w-100"
-    :class="{ 'config-field--full-width': itemMeta?.full_width }"
-  >
+  <div class="w-100" :class="{ 'config-field--full-width': itemMeta?.full_width }">
     <!-- Special handling for specific metadata types -->
-    <template v-if="itemMeta?._special === 'select_provider'">
-      <ProviderSelector
-        :model-value="providerModelValue"
-        :provider-type="'chat_completion'"
+    <template v-if="itemMeta?._special === 'umo'">
+      <UmoSelector
+        :model-value="selectorValue"
+        :multiple="itemMeta?.type === 'list'"
+        :readonly="Boolean(itemMeta?.readonly)"
         @update:model-value="emitUpdate"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'sender_id'">
+      <SenderSelector
+        :model-value="arrayValue"
+        :readonly="Boolean(itemMeta?.readonly)"
+        @update:model-value="emitUpdate"
+      />
+    </template>
+    <template v-else-if="itemMeta?._special === 'select_provider'">
+      <ProviderSelector :model-value="selectorValue" @update:model-value="emitUpdate" :provider-type="'chat_completion'" />
+    </template>
     <template v-else-if="itemMeta?._special === 'select_provider_stt'">
       <ProviderSelector
-        :model-value="providerModelValue"
+        :model-value="selectorValue"
         :provider-type="'speech_to_text'"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_provider_tts'">
       <ProviderSelector
-        :model-value="providerModelValue"
+        :model-value="selectorValue"
         :provider-type="'text_to_speech'"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_providers'">
       <ProviderSelector
-        :model-value="providerModelValue"
+        :model-value="selectorValue"
         :provider-type="'chat_completion'"
         :multiple="true"
         @update:model-value="emitUpdate"
       />
     </template>
-    <template
-      v-else-if="
-        getSpecialName(itemMeta?._special) === 'select_agent_runner_provider'
-      "
-    >
-      <ProviderSelector
-        :model-value="providerModelValue"
-        :provider-type="'agent_runner'"
-        :provider-subtype="getSpecialSubtype(itemMeta?._special)"
-        @update:model-value="emitUpdate"
-      />
-    </template>
     <template v-else-if="itemMeta?._special === 'provider_pool'">
       <ProviderSelector
-        :model-value="providerModelValue"
+        :model-value="selectorValue"
         :provider-type="'chat_completion'"
         :button-text="t('core.shared.providerSelector.selectProviderPool')"
         @update:model-value="emitUpdate"
       />
     </template>
+    <template v-else-if="itemMeta?._special === 'select_agent_configs'">
+      <AgentConfigSelector :model-value="stringArrayValue" @update:model-value="emitUpdate" />
+    </template>
     <template v-else-if="itemMeta?._special === 'select_persona'">
       <PersonaSelector
-        :model-value="modelString"
+        :model-value="stringValue"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'persona_pool'">
       <PersonaSelector
-        :model-value="modelString"
+        :model-value="stringValue"
         :button-text="t('core.shared.personaSelector.selectPersonaPool')"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_knowledgebase'">
       <KnowledgeBaseSelector
-        :model-value="modelArray"
+        :model-value="arrayValue"
         @update:model-value="emitUpdate"
       />
     </template>
     <template v-else-if="itemMeta?._special === 'select_plugin_set'">
-      <PluginSetSelector
-        :model-value="modelStrings"
-        @update:model-value="emitUpdate"
-      />
+      <PluginSetSelector :model-value="arrayValue" :selection-only="itemMeta?.selection_only" @update:model-value="emitUpdate" />
     </template>
     <template v-else-if="itemMeta?._special === 't2i_template'">
       <T2ITemplateEditor />
@@ -90,7 +86,7 @@
     </template>
     <template v-else-if="itemMeta?._special === 'local_permission_matrix'">
       <LocalPermissionMatrix
-        :model-value="modelObject"
+        :model-value="objectValue"
         @update:model-value="emitUpdate"
       />
     </template>
@@ -142,13 +138,8 @@
 
     <v-autocomplete
       v-else-if="itemMeta?.type === 'list' && itemMeta?.options"
-      :model-value="modelArray"
-      @update:model-value="
-        (val) => {
-          emitUpdate(val);
-          listSearchText = '';
-        }
-      "
+      :model-value="arrayValue"
+      @update:model-value="val => { emitUpdate(val); listSearchText = '' }"
       v-model:search="listSearchText"
       :items="listSelectItems"
       item-title="title"
@@ -183,7 +174,7 @@
           flex-grow: 1;
           border: 1px solid rgba(0, 0, 0, 0.1);
         "
-        :value="modelString"
+        :value="stringValue"
         @update:value="emitUpdate"
       />
       <v-btn
@@ -203,37 +194,25 @@
     <v-text-field
       v-else-if="itemMeta?.type === 'string'"
       :model-value="modelValue"
+      @update:model-value="emitUpdate"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
-      :autocomplete="secretField ? 'new-password' : undefined"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
       @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
       hide-details
-      @update:model-value="emitUpdate"
     />
 
-    <div
-      v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'"
-      class="d-flex align-center gap-3"
-    >
-      <div
-        v-if="itemMeta?.slider"
-        style="flex: 3; display: flex; align-items: center; gap: 8px"
-      >
-        <span style="min-width: 5px; text-align: right">
+    <div v-else-if="itemMeta?.type === 'int' || itemMeta?.type === 'float'" class="d-flex align-center gap-3">
+      <div v-if="itemMeta?.slider" style="flex: 3; display: flex; align-items: center; gap: 8px">
+        <span style="min-width: 5px; text-align: right;">
           {{ itemMeta?.slider?.min ?? 0 }}
         </span>
 
-        <v-slider
-          :model-value="toNumber(numericTemp ?? modelValue)"
-          @update:model-value="
-            (val) => {
-              numericTemp = val;
-              emitUpdate(toNumber(val));
-            }
-          "
+        <v-slider :model-value="toNumber(numericTemp ?? modelValue)"
+          @update:model-value="val => { numericTemp = val; emitUpdate(toNumber(val)) }"
           @end="numericTemp = null"
           :min="itemMeta?.slider?.min ?? 0"
           :max="itemMeta?.slider?.max ?? 100"
@@ -241,25 +220,22 @@
           color="primary"
           density="compact"
           hide-details
-          style="flex: 1"
-        ></v-slider>
+          style="flex: 1"></v-slider>
 
-        <span style="min-width: 5px; text-align: left">
+        <span style="min-width: 5px; text-align: left;">
           {{ itemMeta?.slider?.max ?? 100 }}
         </span>
       </div>
 
       <v-text-field
         :model-value="numericTemp ?? modelValue"
-        @update:model-value="(val) => (numericTemp = val)"
-        @blur="
-          () => {
-            if (numericTemp != null) {
-              emitUpdate(toNumber(numericTemp));
-            }
-            numericTemp = null;
+        @update:model-value="val => (numericTemp = val)"
+        @blur="() => {
+          if (numericTemp != null) {
+            emitUpdate(itemMeta?.nullable && numericTemp === '' ? null : toNumber(numericTemp))
           }
-        "
+          numericTemp = null
+        }"
         density="compact"
         variant="outlined"
         class="config-field"
@@ -291,7 +267,7 @@
 
     <FileConfigItem
       v-else-if="itemMeta?.type === 'file'"
-      :model-value="modelArray"
+      :model-value="arrayValue"
       :item-meta="itemMeta"
       :plugin-name="pluginName"
       :config-key="configKey"
@@ -299,17 +275,17 @@
       @update:model-value="emitUpdate"
     />
 
-    <div v-else-if="itemMeta?.type === 'list'" class="config-field">
-      <ListConfigItem
-        :model-value="modelStrings"
-        :secret="secretField"
-        @update:model-value="emitUpdate"
-      />
-    </div>
+    <ListConfigItem
+      v-else-if="itemMeta?.type === 'list'"
+      :model-value="arrayValue"
+      @update:model-value="emitUpdate"
+      :secret="Boolean(itemMeta?.secret)"
+      class="config-field"
+    />
 
     <ObjectEditor
       v-else-if="itemMeta?.type === 'dict'"
-      :model-value="modelObject"
+      :model-value="objectValue"
       :item-meta="itemMeta"
       :plugin-name="pluginName"
       :plugin-i18n="pluginI18n"
@@ -321,35 +297,38 @@
     <v-text-field
       v-else
       :model-value="modelValue"
+      @update:model-value="emitUpdate"
       :type="stringInputType"
       :append-inner-icon="secretToggleIcon"
-      :autocomplete="secretField ? 'new-password' : undefined"
+      :autocomplete="itemMeta?.secret ? 'new-password' : undefined"
       @click:append-inner="secretVisible = !secretVisible"
       density="compact"
       variant="outlined"
       class="config-field"
       hide-details
-      @update:model-value="emitUpdate"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { VueMonacoEditor } from "@guolao/vue-monaco-editor";
 import { computed, type PropType, ref } from "vue";
-import { statsApi } from "@/api/v1";
+import { LazyMonacoEditor as VueMonacoEditor } from "@/components/shared/LazyMonacoEditor";
 import { useI18n, useModuleI18n } from "@/i18n/composables";
 import { usePluginI18n } from "@/utils/pluginI18n";
+import { isRecord, stringArray } from "@/utils/typeGuards";
+import AgentConfigSelector from "./AgentConfigSelector.vue";
 import DashboardTotpManager from "./DashboardTotpManager.vue";
 import FileConfigItem from "./FileConfigItem.vue";
 import KnowledgeBaseSelector from "./KnowledgeBaseSelector.vue";
 import ListConfigItem from "./ListConfigItem.vue";
-import LocalPermissionMatrix, { windowsPermissionDefaults } from "./LocalPermissionMatrix.vue";
-import type ObjectEditor from "./ObjectEditor.vue";
+import LocalPermissionMatrix from "./LocalPermissionMatrix.vue";
+import ObjectEditor from "./ObjectEditor.vue";
 import PersonaSelector from "./PersonaSelector.vue";
 import PluginSetSelector from "./PluginSetSelector.vue";
 import ProviderSelector from "./ProviderSelector.vue";
+import SenderSelector from "./SenderSelector.vue";
 import T2ITemplateEditor from "./T2ITemplateEditor.vue";
+import UmoSelector from "./UmoSelector.vue";
 
 interface SliderConfig {
   min: number;
@@ -358,14 +337,14 @@ interface SliderConfig {
 }
 
 interface ItemMeta {
-  template_schema?: NonNullable<InstanceType<typeof ObjectEditor>["$props"]["itemMeta"]>["template_schema"];
+  template_schema?: Record<string, ItemMeta>;
+  runtime_defaults?: Record<string, Record<string, unknown>>;
   _special?: string;
-  runner_defaults?: Record<string, unknown>;
   type?: string;
   options?: unknown[];
   render_type?: string;
   readonly?: boolean;
-  secret?: boolean;
+  selection_only?: boolean;
   editor_mode?: boolean;
   editor_theme?: string;
   editor_language?: string;
@@ -377,19 +356,12 @@ interface ItemMeta {
 }
 
 const numericTemp = ref<number | string | null>(null);
-const secretVisible = ref(false);
-const secretField = computed(() => props.itemMeta?.secret === true);
-const secretToggleIcon = computed(() =>
-  secretField.value ? (secretVisible.value ? "mdi-eye-off" : "mdi-eye") : undefined,
-);
-const stringInputType = computed(() => (secretField.value && !secretVisible.value ? "password" : "text"));
 const listSearchText = ref("");
+const secretVisible = ref(false);
 
 const props = defineProps({
   modelValue: {
-    type: [String, Number, Boolean, Array, Object] as PropType<
-      string | number | boolean | unknown[] | Record<string, unknown> | null
-    >,
+    type: [String, Number, Boolean, Array, Object],
     default: null,
   },
   itemMeta: {
@@ -422,63 +394,41 @@ const props = defineProps({
   },
 });
 
-const modelString = computed(() => (typeof props.modelValue === "string" ? props.modelValue : ""));
-const modelArray = computed<unknown[]>(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
-const modelStrings = computed(() => modelArray.value.filter((value): value is string => typeof value === "string"));
-const modelObject = computed<Record<string, unknown>>(() =>
-  props.modelValue !== null && typeof props.modelValue === "object" && !Array.isArray(props.modelValue)
-    ? props.modelValue
-    : {},
+const stringValue = computed(() => (typeof props.modelValue === "string" ? props.modelValue : ""));
+const arrayValue = computed(() => (Array.isArray(props.modelValue) ? props.modelValue : []));
+const stringArrayValue = computed(() => stringArray(props.modelValue));
+const selectorValue = computed(() =>
+  typeof props.modelValue === "string" ? props.modelValue : stringArrayValue.value,
 );
-const providerModelValue = computed(() =>
-  props.itemMeta?._special === "select_providers" ? modelStrings.value : modelString.value,
-);
+const objectValue = computed(() => (isRecord(props.modelValue) ? props.modelValue : {}));
 
-const emit = defineEmits<{
-  "update:modelValue": [value: unknown];
-  "get-embedding-dim": [];
-  "open-fullscreen": [];
-}>();
+const emit = defineEmits(["update:modelValue", "get-embedding-dim", "open-fullscreen"]);
 const { t } = useI18n();
 const { getRaw } = useModuleI18n("features/config-metadata");
 const { configText } = usePluginI18n();
 
-async function emitUpdate(val: unknown) {
-  val = validateNumericConfig(props.itemMeta?.type, val);
-  const enablingLocal =
-    props.configKey === "provider_settings.computer_use_runtime" &&
-    (props.modelValue === "none" || props.modelValue == null) &&
-    val === "local";
+function emitUpdate(rawValue: unknown): void {
+  const val = validateNumericConfig(props.itemMeta?.type, rawValue);
   if (
-    props.itemMeta?._special === "agent_runner_type" &&
-    props.configRoot?.agent_runner &&
+    props.itemMeta?._special === "agent_runtime" &&
+    props.configRoot?.agent &&
     typeof val === "string" &&
-    props.itemMeta?.runner_defaults?.[val]
+    props.itemMeta?.runtime_defaults?.[val]
   ) {
-    props.configRoot.agent_runner.config = JSON.parse(JSON.stringify(props.itemMeta.runner_defaults[val]));
+    props.configRoot.agent.config = JSON.parse(JSON.stringify(props.itemMeta.runtime_defaults[val]));
   }
   emit("update:modelValue", val);
-  if (enablingLocal && props.configRoot?.provider_settings) {
-    const settings = props.configRoot.provider_settings;
-    try {
-      const response = await statsApi.version();
-      if (response.data?.data?.runtime?.os === "windows" && settings.computer_use_runtime === "local") {
-        const permissions = { ...settings.computer_use_local_permissions };
-        for (const [role, defaults] of Object.entries(windowsPermissionDefaults)) {
-          const policy = permissions[role];
-          if (!policy || policy.filesystem_scope === "workspace") permissions[role] = { ...defaults };
-        }
-        settings.computer_use_local_permissions = permissions;
-      }
-    } catch (error) {
-      console.warn("Failed to initialize local permissions:", error);
-    }
-  }
 }
 
 const listSelectItems = computed(() =>
   props.itemMeta?.type === "list" && props.itemMeta?.options ? getSelectItems(props.itemMeta) : [],
 );
+
+const stringInputType = computed(() => (props.itemMeta?.secret && !secretVisible.value ? "password" : "text"));
+const secretToggleIcon = computed(() => {
+  if (!props.itemMeta?.secret) return undefined;
+  return secretVisible.value ? "mdi-eye-off-outline" : "mdi-eye-outline";
+});
 
 function toNumber(val: unknown): number {
   const n = parseFloat(String(val));
@@ -487,16 +437,16 @@ function toNumber(val: unknown): number {
 
 function validateNumericConfig(modelType: string | undefined, rawValue: unknown): unknown {
   if (modelType === "int" || modelType === "float") {
-    // Clamp numeric values to the configured slider bounds.
+    // 如果有滑动条定义，应用边界限制
     const slider = props.itemMeta?.slider;
     if (slider) {
       const min = slider.min ?? 0;
       const max = slider.max ?? 100;
-      return Math.max(min, Math.min(max, toNumber(rawValue)));
+      return Math.max(min, Math.min(max, Number(rawValue)));
     } else {
       return rawValue;
     }
-  } else if (modelType === "dict" && rawValue && typeof rawValue === "object") {
+  } else if (modelType === "dict" && rawValue !== null && typeof rawValue === "object" && !Array.isArray(rawValue)) {
     Object.entries(rawValue).forEach(([key, value]) => {
       const templatesSchema = props.itemMeta?.template_schema;
       const templateType = templatesSchema?.[key]?.type;
@@ -504,7 +454,7 @@ function validateNumericConfig(modelType: string | undefined, rawValue: unknown)
       if ((templateType === "int" || templateType === "float") && templateSlider) {
         const min = templateSlider.min ?? 0;
         const max = templateSlider.max ?? 100;
-        (rawValue as Record<string, unknown>)[key] = Math.max(min, Math.min(max, toNumber(value)));
+        (rawValue as Record<string, unknown>)[key] = Math.max(min, Math.min(max, Number(value)));
       }
     });
     return rawValue;
@@ -538,37 +488,30 @@ function getTranslatedLabels(itemMeta: ItemMeta): string[] | null {
   return null;
 }
 
-function getSelectItems(itemMeta: ItemMeta): unknown[] {
+function getSelectItems(itemMeta: ItemMeta) {
   const labels = getTranslatedLabels(itemMeta);
-  if (labels && itemMeta.options) {
+  let subtitles = itemMeta?.subtitles;
+  if (props.pluginName && props.configKey && props.pluginI18n && Object.keys(props.pluginI18n).length > 0) {
+    const translatedSubtitles = configText(props.pluginI18n, props.configKey, "subtitles");
+    if (Array.isArray(translatedSubtitles)) {
+      subtitles = translatedSubtitles;
+    }
+  }
+  if (typeof subtitles === "string") {
+    subtitles = getRaw(subtitles);
+  }
+  const subtitleLabels = Array.isArray(subtitles) ? subtitles : null;
+
+  if ((labels || subtitleLabels) && itemMeta.options) {
     return itemMeta.options.map((value, index) => ({
-      title: labels[index] || value,
+      title: labels?.[index] || value,
       value: value,
+      props: {
+        subtitle: typeof subtitleLabels?.[index] === "string" ? subtitleLabels[index] : undefined,
+      },
     }));
   }
   return itemMeta.options || [];
-}
-
-function parseSpecialValue(value: string | undefined): {
-  name: string;
-  subtype: string;
-} {
-  if (!value || typeof value !== "string") {
-    return { name: "", subtype: "" };
-  }
-  const [name, ...rest] = value.split(":");
-  return {
-    name,
-    subtype: rest.join(":") || "",
-  };
-}
-
-function getSpecialName(value: string | undefined): string {
-  return parseSpecialValue(value).name;
-}
-
-function getSpecialSubtype(value: string | undefined): string {
-  return parseSpecialValue(value).subtype;
 }
 </script>
 

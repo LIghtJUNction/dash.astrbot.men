@@ -137,7 +137,12 @@
                       />
                     </div>
 
-                    <div
+                    <PluginViewMessage
+                        v-else-if="part.type === 'view'"
+                        :part="part"
+                        :is-dark="isDark"
+                      />
+                      <div
                       v-else-if="part.type === 'tool_call'"
                       class="tool-call-block"
                     >
@@ -150,7 +155,7 @@
                           :is-dark="isDark"
                         >
                           <template #label>
-                            <v-icon size="16">mdi-code-json</v-icon>
+                            <CodeXml :size="16" aria-hidden="true" />
                             <span>{{ tool.name || "python" }}</span>
                             <span class="tool-call-inline-status">
                               {{ toolCallStatusText(tool) }}
@@ -269,6 +274,7 @@
 </template>
 
 <script setup lang="ts">
+import { CodeXml } from "@lucide/vue";
 import { computed, nextTick, reactive, ref } from "vue";
 import { fileApi } from "@/api/v1";
 import { attachmentName, attachmentPresentation } from "@/components/chat/attachmentPresentation";
@@ -277,6 +283,7 @@ import MessageContentTransition from "@/components/chat/MessageContentTransition
 import ActionRef from "@/components/chat/message_list_comps/ActionRef.vue";
 import IPythonToolBlock from "@/components/chat/message_list_comps/IPythonToolBlock.vue";
 import MarkdownMessagePart from "@/components/chat/message_list_comps/MarkdownMessagePart.vue";
+import PluginViewMessage from "@/components/chat/message_list_comps/PluginViewMessage.vue";
 import ReasoningBlock from "@/components/chat/message_list_comps/ReasoningBlock.vue";
 import RefsSidebar from "@/components/chat/message_list_comps/RefsSidebar.vue";
 import ToolCallCard from "@/components/chat/message_list_comps/ToolCallCard.vue";

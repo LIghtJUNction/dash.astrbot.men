@@ -6,9 +6,7 @@
           <aside class="platform-workbench__sidebar">
             <div class="bot-list-panel">
               <div class="bot-list-panel__head">
-                <h3 class="bot-list-panel__title">
-                  {{ tm("workspace.listTitle") }}
-                </h3>
+                <h3 class="bot-list-panel__title"> {{ tm("workspace.listTitle") }} </h3>
                 <v-btn
                   color="primary"
                   prepend-icon="mdi-plus"
@@ -28,10 +26,7 @@
                 />
               </div>
 
-              <div
-                v-if="platforms.length"
-                class="bot-list-panel__mobile-controls"
-              >
+              <div v-if="platforms.length" class="bot-list-panel__mobile-controls">
                 <v-select
                   v-model="selectedPlatformId"
                   :items="platformOptions"
@@ -49,21 +44,18 @@
                         :src="getPlatformIconFor(item.raw.platform)"
                         class="bot-list-icon bot-list-icon--mobile"
                         alt="bot logo"
-                      />
+                      >
                       <span>{{ item.raw.title }}</span>
                     </div>
                   </template>
                   <template #item="{ props: itemProps, internalItem: item }">
-                    <v-list-item
-                      v-bind="itemProps"
-                      :subtitle="item.raw.subtitle"
-                    >
+                    <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle">
                       <template #prepend>
                         <img
                           :src="getPlatformIconFor(item.raw.platform)"
                           class="bot-list-icon bot-list-icon--mobile me-2"
                           alt="bot logo"
-                        />
+                        >
                       </template>
                     </v-list-item>
                   </template>
@@ -75,7 +67,7 @@
                   variant="text"
                   :aria-label="tm('workspace.delete')"
                   :title="tm('workspace.delete')"
-                  @click="deletePlatform(selectedPlatform)"
+                  @click="platformToDelete = selectedPlatform"
                 />
               </div>
 
@@ -88,23 +80,12 @@
                     'bot-list-item--active': selectedPlatformId === platform.id,
                   }"
                 >
-                  <button
-                    type="button"
-                    class="bot-list-item__main"
-                    @click="selectedPlatformId = platform.id"
-                  >
-                    <img
-                      :src="getPlatformIconFor(platform)"
-                      class="bot-list-icon"
-                      alt="bot logo"
-                    />
+                  <button type="button" class="bot-list-item__main" @click="selectedPlatformId = platform.id">
+                    <img :src="getPlatformIconFor(platform)" class="bot-list-icon" alt="bot logo">
                     <div class="bot-list-item__copy">
                       <div class="bot-list-item__title">{{ platform.id }}</div>
                       <div class="bot-list-item__subtitle">
-                        <span
-                          class="bot-list-item__status-dot"
-                          :class="getPlatformStatusClass(platform)"
-                        ></span>
+                        <span class="bot-list-item__status-dot" :class="getPlatformStatusClass(platform)"></span>
                         <span>{{ getPlatformStatusLabel(platform) }}</span>
                         <span v-if="platform.type">· {{ platform.type }}</span>
                       </div>
@@ -117,16 +98,14 @@
                       variant="text"
                       :aria-label="tm('workspace.delete')"
                       :title="tm('workspace.delete')"
-                      @click="deletePlatform(platform)"
+                      @click="platformToDelete = platform"
                     />
                   </div>
                 </div>
               </div>
 
               <div v-else-if="!loadingPlatforms" class="bot-list-empty">
-                <v-icon size="42" color="grey-lighten-1"
-                  >mdi-robot-outline</v-icon
-                >
+                <v-icon size="42" color="grey-lighten-1">mdi-robot-outline</v-icon>
                 <p>{{ tm("workspace.empty") }}</p>
                 <v-btn
                   color="primary"
@@ -149,7 +128,7 @@
               :key="selectedPlatform.id"
               :platform="selectedPlatform"
               :metadata="metadata"
-              :runtime-stat="getPlatformStat(selectedPlatform.id) || undefined"
+              :runtime-stat="getPlatformStat(selectedPlatform.id)"
               :has-qr-payload="hasQrPayload(selectedPlatform.id)"
               @saved="handlePlatformSaved"
               @show-toast="showToast"
@@ -159,9 +138,7 @@
             />
 
             <div v-else class="platform-empty-state">
-              <v-icon size="48" color="grey-lighten-1"
-                >mdi-cursor-default-click</v-icon
-              >
+              <v-icon size="48" color="grey-lighten-1">mdi-cursor-default-click</v-icon>
               <p>{{ tm("workspace.selectHint") }}</p>
             </div>
           </main>
@@ -178,6 +155,8 @@
       @refresh-config="handlePlatformCreated"
     />
 
+    <DeletePlatformDialog v-model:platform="platformToDelete" @deleted="handlePlatformDeleted" />
+
     <v-dialog v-model="showWebhookDialog" max-width="600">
       <v-card>
         <v-card-title class="text-h3 pa-4 pb-0 pl-6 d-flex align-center">
@@ -185,32 +164,16 @@
           {{ tm("webhookDialog.title") }}
         </v-card-title>
         <v-card-text class="px-4 pb-2">
-          <p class="text-body-2 text-medium-emphasis mb-3">
-            {{ tm("webhookDialog.description") }}
-          </p>
-          <v-text-field
-            :model-value="currentWebhookUrl"
-            readonly
-            variant="outlined"
-            hide-details
-          >
+          <p class="text-body-2 text-medium-emphasis mb-3"> {{ tm("webhookDialog.description") }} </p>
+          <v-text-field :model-value="currentWebhookUrl" readonly variant="outlined" hide-details>
             <template #append-inner>
-              <v-btn
-                icon="mdi-content-copy"
-                size="small"
-                variant="text"
-                @click="copyWebhookUrl(currentWebhookUuid)"
-              />
+              <v-btn icon="mdi-content-copy" size="small" variant="text" @click="copyWebhookUrl(currentWebhookUuid)" />
             </template>
           </v-text-field>
         </v-card-text>
         <v-card-actions class="pa-4 pt-2">
           <v-spacer />
-          <v-btn
-            variant="tonal"
-            color="primary"
-            @click="showWebhookDialog = false"
-          >
+          <v-btn variant="tonal" color="primary" @click="showWebhookDialog = false">
             {{ tm("webhookDialog.close") }}
           </v-btn>
         </v-card-actions>
@@ -226,10 +189,8 @@
         <v-card-text class="px-4 pb-4">
           <div class="platform-qr-status">
             {{ tm("platformQr.status") }}:
-            {{
-              getPlatformQrLoginStat(currentQrPlatformId)?.qr_status ||
-              tm("platformQr.waiting")
-            }}
+            {{ getPlatformQrLoginStat(currentQrPlatformId)?.qr_status ||
+              tm("platformQr.waiting") }}
           </div>
           <QrCodeViewer
             :value="
@@ -242,9 +203,7 @@
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
-          <v-btn variant="tonal" color="primary" @click="showQrDialog = false">
-            {{ tm("platformQr.close") }}
-          </v-btn>
+          <v-btn variant="tonal" color="primary" @click="showQrDialog = false"> {{ tm("platformQr.close") }} </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -265,26 +224,18 @@
             {{ currentErrorPlatform.error_count }}
           </div>
           <div v-if="currentErrorPlatform.last_error" class="error-details">
-            <div class="mb-2">
-              <strong>{{ tm("errorDialog.lastError") }}:</strong>
-            </div>
+            <div class="mb-2"> <strong>{{ tm("errorDialog.lastError") }}:</strong> </div>
             <v-alert type="error" variant="tonal" class="mb-3">
-              <div class="error-message">
-                {{ currentErrorPlatform.last_error.message }}
-              </div>
+              <div class="error-message"> {{ currentErrorPlatform.last_error.message }} </div>
               <div class="error-time text-caption text-medium-emphasis mt-1">
                 {{ tm("errorDialog.occurredAt") }}:
-                {{
-                  new Date(
+                {{ new Date(
                     currentErrorPlatform.last_error.timestamp,
-                  ).toLocaleString()
-                }}
+                  ).toLocaleString() }}
               </div>
             </v-alert>
             <div v-if="currentErrorPlatform.last_error.traceback">
-              <div class="mb-2">
-                <strong>{{ tm("errorDialog.traceback") }}:</strong>
-              </div>
+              <div class="mb-2"> <strong>{{ tm("errorDialog.traceback") }}:</strong> </div>
               <pre class="traceback-box">{{
                 currentErrorPlatform.last_error.traceback
               }}</pre>
@@ -293,24 +244,14 @@
         </v-card-text>
         <v-card-actions class="pa-4 pt-0">
           <v-spacer />
-          <v-btn
-            variant="tonal"
-            color="primary"
-            @click="showErrorDialog = false"
-          >
+          <v-btn variant="tonal" color="primary" @click="showErrorDialog = false">
             {{ tm("errorDialog.close") }}
           </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
-    <v-snackbar
-      v-model="snackbar.show"
-      :timeout="3000"
-      :color="snackbar.color"
-      elevation="6"
-      location="top"
-    >
+    <v-snackbar v-model="snackbar.show" :timeout="3000" :color="snackbar.color" elevation="6" location="top">
       {{ snackbar.message }}
     </v-snackbar>
   </div>
@@ -320,57 +261,53 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { botApi, fileApi, systemConfigApi } from "@/api/v1";
 import AddNewPlatform from "@/components/platform/AddNewPlatform.vue";
+import DeletePlatformDialog from "@/components/platform/DeletePlatformDialog.vue";
 import PlatformEditor from "@/components/platform/PlatformEditor.vue";
 import QrCodeViewer from "@/components/shared/QrCodeViewer.vue";
 import { mergeDynamicTranslations, useModuleI18n } from "@/i18n/composables";
 import { copyToClipboard } from "@/utils/clipboard";
-import { askForConfirmation as askForConfirmationDialog, useConfirmDialog } from "@/utils/confirmDialog";
 import { getPlatformIcon } from "@/utils/platformUtils";
+import { resolveApiUrl } from "@/utils/request";
 
-const { tm } = useModuleI18n("features/platform");
-const confirmDialog = useConfirmDialog();
-
-interface PlatformConfig {
+interface PlatformConfig extends Record<string, unknown> {
   id: string;
   type?: string;
   enable?: boolean;
-  [key: string]: unknown;
+  webhook_uuid?: string;
 }
-interface PlatformQrStat {
+interface QrLoginStat {
   qr_status?: string;
   qrcode_img_content?: string;
   qrcode?: string;
 }
-interface PlatformStat {
+interface PlatformStat extends Record<string, unknown> {
   id: string;
   status?: string;
   error_count?: number;
-  last_error?: { message: string; timestamp: number | string; traceback?: string };
-  weixin_oc?: PlatformQrStat;
-  [key: string]: unknown;
+  unified_webhook?: boolean;
+  weixin_oc?: QrLoginStat;
+  last_error?: { message?: string; timestamp: string | number; traceback?: string };
 }
-interface PlatformTemplate {
-  id?: string;
-  type?: string;
-  logo_token?: string;
-}
-interface PlatformMetadata {
-  platform_group?: { metadata?: { platform?: { config_template?: Record<string, PlatformTemplate> } } };
-}
-interface RuntimeConfig {
+interface RuntimeConfig extends Record<string, unknown> {
   platform?: PlatformConfig[];
   callback_api_base?: string;
 }
-interface ToastMessage {
-  message: string;
-  type: "success" | "error";
+interface PlatformTemplate {
+  type?: string;
+  logo_token?: string;
 }
+interface PlatformMetadata extends Record<string, unknown> {
+  platform_group?: { metadata?: { platform?: { config_template?: Record<string, PlatformTemplate> } } };
+}
+
+const { tm } = useModuleI18n("features/platform");
 
 const configData = ref<RuntimeConfig>({});
 const metadata = ref<PlatformMetadata>({});
 const loadingPlatforms = ref(true);
 const selectedPlatformId = ref<string | null>(null);
 const showAddPlatformDialog = ref(false);
+const platformToDelete = ref<PlatformConfig | null>(null);
 const platformStats = ref<Record<string, PlatformStat>>({});
 const showWebhookDialog = ref(false);
 const currentWebhookUuid = ref("");
@@ -416,16 +353,12 @@ async function getConfig(preferredPlatformId: string | null = null) {
   loadingPlatforms.value = true;
   try {
     const response = await systemConfigApi.runtime();
-    if (response.data.status !== "ok") throw new Error(response.data.message || tm("messages.getConfigFailed"));
     configData.value = (response.data.data.config || {}) as RuntimeConfig;
     metadata.value = (response.data.data.metadata || {}) as PlatformMetadata;
 
     const platformI18n = response.data.data.platform_i18n_translations;
     if (platformI18n && typeof platformI18n === "object") {
-      mergeDynamicTranslations(
-        "features.config-metadata",
-        platformI18n as Parameters<typeof mergeDynamicTranslations>[1],
-      );
+      mergeDynamicTranslations("features.config-metadata", platformI18n);
     }
 
     const nextSelectedId = preferredPlatformId || selectedPlatformId.value;
@@ -446,10 +379,8 @@ async function getPlatformStats() {
     const response = await botApi.stats();
     if (response.data.status !== "ok") return;
     platformStats.value = Object.fromEntries(
-      (response.data.data.platforms || []).flatMap((platform) =>
-        typeof platform.id === "string" ? [[platform.id, { ...platform, id: platform.id } as PlatformStat]] : [],
-      ),
-    );
+      (response.data.data.platforms || []).map((platform) => [platform.id, platform]),
+    ) as Record<string, PlatformStat>;
   } catch (error) {
     console.warn("Failed to load bot runtime status:", error);
   }
@@ -462,7 +393,7 @@ function handleLocaleChange() {
 function getPlatformIconFor(platform: PlatformConfig) {
   const templates = metadata.value["platform_group"]?.metadata?.platform?.config_template || {};
   const template =
-    (platform.type && templates[platform.type]) ||
+    templates[platform.type || ""] ||
     templates[platform.id] ||
     Object.values(templates).find((item) => item?.type === platform?.type);
   if (template?.logo_token) {
@@ -471,7 +402,7 @@ function getPlatformIconFor(platform: PlatformConfig) {
   return getPlatformIcon(platform?.type || platform?.id);
 }
 
-function getPlatformStat(platformId: string): PlatformStat | null {
+function getPlatformStat(platformId: string) {
   return platformStats.value[platformId] || null;
 }
 
@@ -492,21 +423,12 @@ function getPlatformStatusClass(platform: PlatformConfig) {
   return "bot-list-item__status-dot--disabled";
 }
 
-async function deletePlatform(platform: PlatformConfig) {
-  const message = `${tm("messages.deleteConfirm")} ${platform.id}?`;
-  if (!(await askForConfirmationDialog(message, confirmDialog))) return;
-
-  try {
-    const response = await botApi.delete(platform.id);
-    if (response.data.status !== "ok") throw new Error(response.data.message || tm("messages.deleteFailed"));
-    if (selectedPlatformId.value === platform.id) {
-      selectedPlatformId.value = null;
-    }
-    await getConfig();
-    showSuccess(response.data.message || tm("messages.deleteSuccess"));
-  } catch (error) {
-    showError(error);
+async function handlePlatformDeleted(platformId: string) {
+  if (selectedPlatformId.value === platformId) {
+    selectedPlatformId.value = null;
   }
+  await getConfig();
+  showSuccess(tm("messages.deleteSuccess"));
 }
 
 function handlePlatformCreated(platformId?: string) {
@@ -519,17 +441,14 @@ function handlePlatformSaved(platformId: string) {
   getPlatformStats();
 }
 
-function getPlatformQrLoginStat(platformId: string): PlatformQrStat | null {
+function getPlatformQrLoginStat(platformId: string): QrLoginStat | null {
   const stat = getPlatformStat(platformId);
   if (stat?.weixin_oc) return stat.weixin_oc;
   if (stat && typeof stat === "object") {
     return (
       Object.values(stat).find(
-        (value): value is PlatformQrStat =>
-          value !== null &&
-          typeof value === "object" &&
-          (("qrcode_img_content" in value && typeof value.qrcode_img_content === "string") ||
-            ("qrcode" in value && typeof value.qrcode === "string")),
+        (value): value is QrLoginStat =>
+          value !== null && typeof value === "object" && ("qrcode_img_content" in value || "qrcode" in value),
       ) || null
     );
   }
@@ -548,14 +467,15 @@ function openPlatformQrDialog(platformId: string) {
 
 function showErrorDetails(platform: PlatformConfig) {
   const stat = getPlatformStat(platform.id);
-  if (!stat || (stat.error_count || 0) <= 0) return;
+  if (!stat || (stat.error_count ?? 0) <= 0) return;
   currentErrorPlatform.value = stat;
   showErrorDialog.value = true;
 }
 
 function getWebhookUrl(webhookUuid: string) {
-  const callbackBase = configData.value.callback_api_base || "http(s)://<your-domain-or-ip>";
-  return `${callbackBase.replace(/\/$/, "")}/api/v1/webhooks/platforms/${webhookUuid}`;
+  const path = "/api/v1/webhooks/platforms/" + webhookUuid;
+  const callbackBase = configData.value.callback_api_base?.trim();
+  return callbackBase ? callbackBase.replace(/\/$/, "") + path : resolveApiUrl(path);
 }
 
 function openWebhookDialog(webhookUuid: string) {
@@ -572,7 +492,7 @@ async function copyWebhookUrl(webhookUuid: string) {
   }
 }
 
-function showToast({ message, type }: ToastMessage) {
+function showToast({ message, type }: { message: string; type: "success" | "error" }) {
   snackbar.value = {
     show: true,
     message,
@@ -585,8 +505,8 @@ function showSuccess(message: string) {
 }
 
 function showError(error: unknown) {
-  const apiError = error as { response?: { data?: { message?: string } }; message?: string } | null;
-  const message = apiError?.response?.data?.message || apiError?.message || String(error);
+  const detail = error as { response?: { data?: { message?: string } }; message?: string } | null | undefined;
+  const message = detail?.response?.data?.message || detail?.message || String(error);
   showToast({ message, type: "error" });
 }
 </script>
@@ -842,12 +762,8 @@ function showError(error: unknown) {
   margin-bottom: 10px;
 }
 
-.platform-content {
-  background: var(--platform-panel-bg);
-  border: 1px solid var(--platform-border);
-  border-radius: 12px;
-  backdrop-filter: blur(16px);
-  box-shadow: var(--platform-shadow);
+.error-message {
+  word-break: break-word;
 }
 
 .traceback-box {

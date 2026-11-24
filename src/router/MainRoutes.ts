@@ -96,7 +96,7 @@ const MainRoutes = {
     {
       name: "PluginView",
       path: "/plugin-view/:pluginName/:pageName",
-      component: () => import("@/views/PluginPagePage.vue"),
+      component: () => import("@/views/PluginViewPage.vue"),
     },
     {
       // Legacy alias of the plugin view route.
@@ -152,16 +152,16 @@ const MainRoutes = {
     },
     {
       path: "/normal",
-      redirect: "/config",
+      redirect: "/config#normal",
     },
     {
       path: "/system",
-      redirect: "/settings#system-config",
+      redirect: "/config#system",
     },
     {
       name: "SessionManagement",
       path: "/session-management",
-      component: () => import("@/views/SessionManagementPage.vue"),
+      redirect: "/config?scope=sessions",
     },
     {
       name: "Persona",
@@ -172,7 +172,13 @@ const MainRoutes = {
       name: "Data",
       path: "/data",
       component: () => import("@/views/DataPage.vue"),
-      redirect: redirectToDataTab("Stats"),
+      // Reopen the last visited tab, falling back to Statistics by default.
+      redirect: (to: RouteLocationGeneric) => {
+        const lastTab = localStorage.getItem("data_last_tab");
+        return redirectToDataTab(
+          lastTab && ["Stats", "Conversation", "Console", "Trace"].includes(lastTab) ? lastTab : "Stats",
+        )(to);
+      },
       children: [
         {
           name: "Stats",

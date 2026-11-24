@@ -1,4 +1,4 @@
-import type { ThemeDefinition } from "vuetify";
+import type { ThemeTypes } from "@/types/themeTypes/ThemeType";
 import { LIGHT_THEME_NAME } from "./constants";
 
 /**
@@ -12,7 +12,7 @@ import { LIGHT_THEME_NAME } from "./constants";
  * - Surface: Background areas with tonal elevation
  * - Error: Error/warning states
  */
-const BlueBusinessLightTheme = {
+const BlueBusinessLightTheme: ThemeTypes = {
   name: LIGHT_THEME_NAME,
   dark: false,
   variables: {
@@ -138,6 +138,6 @@ const BlueBusinessLightTheme = {
     // === Overlay ===
     overlay: "#FFFFFFDD",
   },
-} satisfies ThemeDefinition & { name: string };
+};
 
 export { BlueBusinessLightTheme };

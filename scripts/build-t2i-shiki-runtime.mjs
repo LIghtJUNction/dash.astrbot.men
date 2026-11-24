@@ -228,11 +228,11 @@ async function main() {
           formats: ["iife"],
           name: "AstrBotT2IShikiRuntime",
         },
-        minify: "esbuild",
+        minify: "oxc",
         outDir: path.dirname(runtimeOutputFile),
-        rollupOptions: {
+        rolldownOptions: {
           output: {
-            inlineDynamicImports: true,
+            codeSplitting: false,
           },
         },
         sourcemap: false,

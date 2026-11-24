@@ -47,7 +47,7 @@
             <h3 class="ai-config-panel__section-title">
               <span>{{ runnerSettingsTitle }}</span>
               <AstrBotLogo
-                v-if="runnerType === 'local'"
+                v-if="runnerType === 'astrbot'"
                 class="ai-config-panel__brand-logo"
               />
             </h3>
@@ -57,7 +57,7 @@
           </div>
         </div>
 
-        <template v-if="runnerType === 'local'">
+        <template v-if="runnerType === 'astrbot'">
           <div class="ai-config-tabs" role="tablist" :aria-label="runnerSettingsTitle">
             <button
               v-for="item in localTabs"
@@ -222,7 +222,7 @@ const props = defineProps({
 const { tm } = useModuleI18n("features/config");
 
 const runnerDialog = ref(false);
-const pendingRunnerType = ref("local");
+const pendingRunnerType = ref("astrbot");
 const runnerChangeAcknowledged = ref(false);
 const activeLocalTab = ref("model");
 
@@ -238,11 +238,11 @@ const aiEnabled = computed({
   },
 });
 
-const runnerType = computed(() => props.configData?.agent_runner?.runner_type || "local");
-const runnerTypeMetadata = computed(() => props.metadata?.agent_runner?.items?.["agent_runner.runner_type"] || {});
+const runnerType = computed(() => props.configData?.agent?.runtime || "astrbot");
+const runnerTypeMetadata = computed(() => props.metadata?.agent?.items?.["agent.runtime"] || {});
 
 const runnerOptions = computed(() => {
-  const availableTypes = runnerTypeMetadata.value.options || ["local", "dify", "coze", "dashscope", "deerflow"];
+  const availableTypes = runnerTypeMetadata.value.options || ["astrbot", "dify", "coze", "dashscope", "deerflow"];
   return availableTypes.map((value) => ({
     value,
     title: tm(`aiSettings.runners.${value}.title`),
@@ -254,11 +254,11 @@ const runnerOptions = computed(() => {
 const currentRunner = computed(
   () =>
     runnerOptions.value.find((runner) => runner.value === runnerType.value) ||
-    runnerOptions.value[0] || { value: "local", title: "AI", description: "", summary: "" },
+    runnerOptions.value[0] || { value: "astrbot", title: "AI", description: "", summary: "" },
 );
 
 const runnerSettingsTitle = computed(() =>
-  runnerType.value === "local"
+  runnerType.value === "astrbot"
     ? tm("aiSettings.localSettingsTitle")
     : `${currentRunner.value.title} ${tm("aiSettings.settingsSuffix")}`,
 );
@@ -288,11 +288,11 @@ function filterMetadataGroup(groupKey, itemFilter, overrides = {}) {
 }
 
 const localTabGroups = computed(() => {
-  const modelGroup = filterMetadataGroup("ai", (itemKey) => itemKey.startsWith("agent_runner.config.model."), {
+  const modelGroup = filterMetadataGroup("ai", (itemKey) => itemKey.startsWith("agent.config.model."), {
     description: tm("aiSettings.groups.model"),
     hint: tm("aiSettings.groups.modelHint"),
   });
-  const executionGroup = filterMetadataGroup("others", (itemKey) => itemKey.startsWith("agent_runner.config.misc."), {
+  const executionGroup = filterMetadataGroup("others", (itemKey) => itemKey.startsWith("agent.config.misc."), {
     description: tm("aiSettings.groups.execution"),
     hint: tm("aiSettings.groups.executionHint"),
   });
@@ -300,7 +300,7 @@ const localTabGroups = computed(() => {
   return {
     model: [modelGroup].filter(Boolean),
     persona: props.metadata?.persona ? [{ key: "persona", metadata: props.metadata.persona }] : [],
-    capabilities: ["knowledgebase", "websearch", "agent_computer_use", "proactive_capability"]
+    capabilities: ["websearch", "agent_computer_use", "subagents", "knowledgebase", "proactive_capability"]
       .filter((key) => props.metadata?.[key])
       .map((key) => ({
         key,
@@ -324,11 +324,11 @@ const thirdPartyRunnerGroup = computed(() => {
 
 const commonGroups = computed(() =>
   [
-    filterMetadataGroup("ai", (itemKey) => !itemKey.startsWith("agent_runner.config."), {
+    filterMetadataGroup("ai", (itemKey) => !itemKey.startsWith("agent.config."), {
       description: tm("aiSettings.groups.media"),
       hint: tm("aiSettings.groups.mediaHint"),
     }),
-    filterMetadataGroup("others", (itemKey) => !itemKey.startsWith("agent_runner.config."), {
+    filterMetadataGroup("others", (itemKey) => !itemKey.startsWith("agent.config."), {
       description: tm("aiSettings.groups.behavior"),
       hint: tm("aiSettings.groups.behaviorHint"),
     }),
@@ -352,12 +352,12 @@ function openRunnerDialog() {
 function confirmRunnerChange() {
   const nextRunnerType = pendingRunnerType.value;
   if (nextRunnerType !== runnerType.value) {
-    const defaults = runnerTypeMetadata.value.runner_defaults?.[nextRunnerType] || {};
-    if (!props.configData.agent_runner) {
-      props.configData.agent_runner = {};
+    const defaults = runnerTypeMetadata.value.runtime_defaults?.[nextRunnerType] || {};
+    if (!props.configData.agent) {
+      props.configData.agent = {};
     }
-    props.configData.agent_runner.runner_type = nextRunnerType;
-    props.configData.agent_runner.config = JSON.parse(JSON.stringify(defaults));
+    props.configData.agent.runtime = nextRunnerType;
+    props.configData.agent.config = JSON.parse(JSON.stringify(defaults));
   }
   runnerChangeAcknowledged.value = false;
   runnerDialog.value = false;
@@ -463,7 +463,7 @@ function confirmRunnerChange() {
   min-height: 30px;
   padding: 5px 12px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--astrbot-radius-control);
   background: transparent;
   color: rgba(var(--v-theme-on-surface), 0.58);
   cursor: pointer;
@@ -490,7 +490,7 @@ function confirmRunnerChange() {
   min-height: 88px;
   padding: 16px 18px;
   border: 1px solid rgba(17, 24, 39, 0.13);
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-card);
   color: rgba(var(--v-theme-on-surface), 0.5);
   background: rgb(var(--v-theme-surface));
 }
@@ -508,7 +508,7 @@ function confirmRunnerChange() {
 }
 
 .runner-dialog-card {
-  border-radius: 14px !important;
+  border-radius: var(--astrbot-radius-dialog) !important;
 }
 
 .runner-dialog-description {
@@ -521,7 +521,7 @@ function confirmRunnerChange() {
 .runner-option-list {
   overflow: hidden;
   border: 1px solid rgba(17, 24, 39, 0.13);
-  border-radius: 10px;
+  border-radius: var(--astrbot-radius-card);
 }
 
 .runner-option {
